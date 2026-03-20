@@ -1,5 +1,5 @@
 // Z2M Panel — panel_custom Web Component
-// v2.8.0
+// v2.9.0
 // Copiar a /config/www/z2m-panel.js
 // Registrar en configuration.yaml como panel_custom
 
@@ -28,7 +28,7 @@ function ageClass(date) {
 // Bridge ID se detecta automáticamente buscando el dispositivo Z2M Bridge
 // No hay que hardcodearlo — funciona en cualquier instancia de HA
 let BRIDGE_ID = null;
-const VER = 'v2.8.0';
+const VER = 'v2.9.0';
 
 // Cache busting: detecta si hay una versión más nueva del archivo en disco
 // (ocurre tras una actualización de HACS) y fuerza una recarga sin caché.
@@ -150,27 +150,35 @@ const CSS = `
 .pair-btn:hover{opacity:.88}
 .pair-btn:active{transform:scale(.95)}
 .pair-btn:disabled{opacity:.45;cursor:not-allowed;transform:none}
-/* ── PERMIT-BAR: píldora fija en el pie (no mueve el layout) ── */
+/* ── PERMIT-BAR: píldora azul fija en el pie (no mueve el layout) ── */
 #permit-bar{
   display:none;
   position:fixed;bottom:22px;left:50%;transform:translateX(-50%);
   z-index:200;
-  background:rgba(28,21,0,.82);
-  border:1px solid rgba(255,214,10,.45);
-  backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
-  border-radius:50px;padding:9px 18px;
-  align-items:center;gap:10px;
-  white-space:nowrap;box-shadow:0 6px 28px rgba(0,0,0,.35);
+  background:rgba(0,18,52,.92);
+  border:1px solid rgba(10,132,255,.55);
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  border-radius:50px;padding:10px 22px;
+  align-items:center;gap:14px;
+  white-space:nowrap;
+  box-shadow:0 6px 32px rgba(0,0,0,.5),0 0 0 1px rgba(10,132,255,.2),0 0 24px rgba(10,132,255,.18);
   animation:pillIn .3s cubic-bezier(.34,1.56,.64,1);
 }
-:host([theme="light"]) #permit-bar{background:rgba(255,248,210,.92);border-color:rgba(180,130,0,.45)}
+:host([theme="light"]) #permit-bar{
+  background:rgba(232,243,255,.96);
+  border-color:rgba(0,122,255,.45);
+  box-shadow:0 4px 20px rgba(0,0,0,.10),0 0 0 1px rgba(0,122,255,.15);}
 #permit-bar.on{display:flex}
 @keyframes pillIn{from{opacity:0;transform:translateX(-50%) translateY(12px) scale(.92)}to{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}}
-.permit-lbl{display:flex;align-items:center;gap:6px;font-size:.78rem;font-weight:500;color:var(--yellow)}
-:host([theme="light"]) .permit-lbl{color:#7a5900}
-#permit-cd{font-size:.82rem;font-weight:700;color:var(--yellow);
-  font-variant-numeric:tabular-nums;min-width:30px;text-align:right}
-:host([theme="light"]) #permit-cd{color:#7a5900}
+.permit-icon{font-size:1.3rem;line-height:1;flex-shrink:0;}
+.permit-content{display:flex;flex-direction:column;gap:2px;}
+.permit-title{font-size:.82rem;font-weight:700;color:var(--tint);line-height:1.1;}
+:host([theme="light"]) .permit-title{color:#004db3;}
+.permit-sub{font-size:.67rem;font-weight:400;color:rgba(10,132,255,.7);line-height:1.2;}
+:host([theme="light"]) .permit-sub{color:rgba(0,77,179,.6);}
+#permit-cd{font-size:.9rem;font-weight:700;color:var(--tint);
+  font-variant-numeric:tabular-nums;min-width:34px;text-align:right;margin-left:2px;}
+:host([theme="light"]) #permit-cd{color:#004db3;}
 main{padding:18px 14px;max-width:1200px;margin:0 auto}
 .sec-hdr{display:flex;align-items:center;justify-content:space-between;padding:0 4px;margin-bottom:8px}
 .sec-lbl{font-size:.7rem;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--text2)}
@@ -529,33 +537,32 @@ main{padding:18px 14px;max-width:1200px;margin:0 auto}
 ::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:2px}
 @media(max-width:500px){main{padding:14px 10px}#navbar{padding:0 12px}}
 
-/* ── RADAR DE PAIRING ── */
+/* ── RADAR DE PAIRING (centro en la píldora) ── */
 @keyframes radarRing{
-  0%  {transform:translate(-50%,0) scale(0);opacity:.85;}
-  80% {opacity:.2;}
-  100%{transform:translate(-50%,0) scale(1);opacity:0;}
+  0%  {transform:translate(-50%,-50%) scale(0);opacity:1;}
+  55% {opacity:.65;}
+  100%{transform:translate(-50%,-50%) scale(1);opacity:0;}
 }
 #pair-ripple{
   display:none;position:fixed;inset:0;pointer-events:none;
-  z-index:1;  /* entre el fondo y el contenido */
-  overflow:hidden;
+  z-index:1;overflow:hidden;
 }
 #pair-ripple.on{display:block;}
 .pr-ring{
   position:absolute;
-  bottom:0;left:50%;
-  width:200vmax;height:200vmax;
+  top:calc(100% - 42px);left:50%;
+  width:240vmax;height:240vmax;
   border-radius:50%;
-  border:2px solid rgba(10,132,255,.55);
-  transform:translate(-50%,0) scale(0);
-  animation:radarRing 3s ease-out infinite;
+  border:3px solid rgba(10,132,255,.85);
+  transform:translate(-50%,-50%) scale(0);
+  animation:radarRing 2s ease-out infinite;
 }
 .pr-ring:nth-child(1){animation-delay:0s;}
-.pr-ring:nth-child(2){animation-delay:1s;border-color:rgba(10,132,255,.38);}
-.pr-ring:nth-child(3){animation-delay:2s;border-color:rgba(10,132,255,.22);}
-:host([theme="light"]) .pr-ring{border-color:rgba(0,122,255,.75);}
-:host([theme="light"]) .pr-ring:nth-child(2){border-color:rgba(0,122,255,.52);}
-:host([theme="light"]) .pr-ring:nth-child(3){border-color:rgba(0,122,255,.32);}
+.pr-ring:nth-child(2){animation-delay:.67s;border-color:rgba(10,132,255,.6);}
+.pr-ring:nth-child(3){animation-delay:1.33s;border-color:rgba(10,132,255,.35);}
+:host([theme="light"]) .pr-ring{border-color:rgba(0,122,255,.9);}
+:host([theme="light"]) .pr-ring:nth-child(2){border-color:rgba(0,122,255,.65);}
+:host([theme="light"]) .pr-ring:nth-child(3){border-color:rgba(0,122,255,.42);}
 
 /* ── PAIR BUTTON pairing state ── */
 @keyframes pairPulse{0%,100%{box-shadow:0 0 0 0 rgba(255,69,58,.5)}50%{box-shadow:0 0 0 8px rgba(255,69,58,0)}}
@@ -581,6 +588,22 @@ main{padding:18px 14px;max-width:1200px;margin:0 auto}
 #joining-toast.on{display:flex;}
 .joining-spinner{width:14px;height:14px;border:2px solid rgba(255,214,10,.3);
   border-top-color:var(--yellow);border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0;}
+
+/* ── CONFETTI ── */
+#confetti-wrap{
+  position:fixed;inset:0;pointer-events:none;z-index:499;
+  display:none;overflow:hidden;
+}
+#confetti-wrap.on{display:block;}
+.confetti-piece{
+  position:absolute;top:0;border-radius:2px;will-change:transform;
+  animation:confettiFall var(--dur,2s) var(--delay,0s) ease-in both;
+}
+@keyframes confettiFall{
+  0%  {transform:translateX(0) translateY(-20px) rotate(0deg);opacity:1;}
+  80% {opacity:.9;}
+  100%{transform:translateX(var(--dx,0px)) translateY(105vh) rotate(var(--rot,360deg));opacity:0;}
+}
 `;
 
 
@@ -610,9 +633,14 @@ const HTML = `
   <div id="pair-ripple"><div class="pr-ring"></div><div class="pr-ring"></div><div class="pr-ring"></div></div>
   <div id="joining-toast"><div class="joining-spinner"></div><span id="joining-txt">Dispositivo detectado…</span></div>
   <div id="permit-bar">
-    <div class="permit-lbl">📡 Pon el dispositivo en modo pairing</div>
+    <div class="permit-icon">📡</div>
+    <div class="permit-content">
+      <div class="permit-title">Buscando dispositivos</div>
+      <div class="permit-sub">Pon el dispositivo en modo pairing</div>
+    </div>
     <span id="permit-cd">—</span>
   </div>
+  <div id="confetti-wrap" aria-hidden="true"></div>
   <main>
     <div id="new-section">
       <div class="sec-hdr">
@@ -1054,9 +1082,19 @@ class Z2MPanel extends HTMLElement {
       if (conn?.last_changed) this._bridgeRestartTime = new Date(conn.last_changed);
 
       this._updateBridge(conn?.state === 'on');
-      if (perm?.state === 'on' && !this._pairActive) {
+      if (perm?.state === 'on') {
         const rem = parseInt(ptim?.state);
-        this._showPairBanner(Number.isFinite(rem) && rem > 0 ? rem : 60);
+        const realRem = Number.isFinite(rem) && rem > 0 ? rem : 60;
+        if (!this._pairActive) {
+          this._showPairBanner(realRem);
+        } else {
+          // Sincronizar si la diferencia con el sensor es significativa (>8s)
+          const cdEl = this._$('permit-cd');
+          const shown = cdEl ? parseInt(cdEl.textContent) : NaN;
+          if (!Number.isFinite(shown) || Math.abs(shown - realRem) > 8) {
+            this._showPairBanner(realRem);
+          }
+        }
       }
 
       // Detectar bridge ID si no está disponible aún
@@ -1541,8 +1579,9 @@ class Z2MPanel extends HTMLElement {
       thumb.textContent = '📡';
     }
 
-    // Partículas
+    // Partículas en el alert y confetti en pantalla
     this._spawnParticles();
+    this._spawnConfetti();
 
     // Mostrar
     alert.classList.add('visible');
@@ -1570,6 +1609,8 @@ class Z2MPanel extends HTMLElement {
       alert.classList.remove('visible', 'leaving');
       alert.style.display = 'none';
     }, 350);
+    const wrap = this._$('confetti-wrap');
+    if (wrap) wrap.classList.remove('on');
   }
 
   _spawnParticles() {
@@ -1596,6 +1637,29 @@ class Z2MPanel extends HTMLElement {
       ].join(';');
       container.appendChild(p);
     }
+  }
+
+  _spawnConfetti() {
+    const wrap = this._$('confetti-wrap');
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    const colors = ['#ff453a','#ff9f0a','#ffd60a','#30d158','#0a84ff','#bf5af2','#ff375f','#4ecdc4','#fff'];
+    for (let i = 0; i < 100; i++) {
+      const p = document.createElement('div');
+      p.className = 'confetti-piece';
+      const color = colors[Math.floor(Math.random() * colors.length)];
+      const x = 5 + Math.random() * 90;
+      const dx = (Math.random() - 0.5) * 360;
+      const dur = (1.6 + Math.random() * 2.2).toFixed(2);
+      const delay = (Math.random() * 1.4).toFixed(2);
+      const rot = Math.round((Math.random() - 0.5) * 900);
+      const w = 5 + Math.random() * 8;
+      const h = (w * (0.4 + Math.random() * 0.8)).toFixed(1);
+      p.style.cssText = `left:${x}%;width:${w.toFixed(1)}px;height:${h}px;background:${color};--dur:${dur}s;--delay:${delay}s;--dx:${Math.round(dx)}px;--rot:${rot}deg`;
+      wrap.appendChild(p);
+    }
+    wrap.classList.add('on');
+    setTimeout(() => { wrap.classList.remove('on'); setTimeout(() => { wrap.innerHTML = ''; }, 100); }, 4500);
   }
 
   // ── POPUP DE ENTIDADES INTERACTIVO ──────────────────────────

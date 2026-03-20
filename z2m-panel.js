@@ -1,5 +1,5 @@
 // Z2M Panel — panel_custom Web Component
-// v2.4.0
+// v2.5.0
 // Copiar a /config/www/z2m-panel.js
 // Registrar en configuration.yaml como panel_custom
 
@@ -28,31 +28,29 @@ function ageClass(date) {
 // Bridge ID se detecta automáticamente buscando el dispositivo Z2M Bridge
 // No hay que hardcodearlo — funciona en cualquier instancia de HA
 let BRIDGE_ID = null;
-const VER = 'v2.4.0';
+const VER = 'v2.5.0';
 
-// Cache busting: invalida la caché del navegador automáticamente
-// Añade ?v=VERSION a la URL del script en el configuration.yaml de forma efectiva
-// registrando el recurso como lovelace resource con versión
-(function bustCache() {
+// Cache busting: detecta si hay una versión más nueva del archivo en disco
+// (ocurre tras una actualización de HACS) y fuerza una recarga sin caché.
+// Usa sessionStorage para evitar bucles infinitos.
+async function checkForUpdate() {
   try {
-    const scripts = document.querySelectorAll('script[src*="z2m-panel"]');
-    scripts.forEach(s => {
-      const url = new URL(s.src, location.href);
-      if (!url.searchParams.has('v') || url.searchParams.get('v') !== VER) {
-        // La URL no tiene la versión correcta — forzamos recarga con la correcta
-        // almacenando en sessionStorage para evitar bucle infinito
-        const reloadKey = 'z2m-panel-reloaded-' + VER;
-        if (!sessionStorage.getItem(reloadKey)) {
-          sessionStorage.setItem(reloadKey, '1');
-          const newUrl = url.href.split('?')[0] + '?v=' + VER;
-          const newScript = document.createElement('script');
-          newScript.src = newUrl;
-          document.head.appendChild(newScript);
-        }
-      }
+    const r = await fetch('/local/community/z2m-panel/z2m-panel.js', {
+      cache: 'no-store',
+      headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
     });
+    const text = await r.text();
+    const m = text.match(/const VER\s*=\s*['"]([^'"]+)['"]/);
+    if (m && m[1] !== VER) {
+      const key = 'z2m-cache-reloaded-' + m[1];
+      if (!sessionStorage.getItem(key)) {
+        sessionStorage.setItem(key, '1');
+        // eslint-disable-next-line no-restricted-globals
+        location.reload(true);
+      }
+    }
   } catch(e) {}
-})();
+}
 
 const imgUrl = m => m
   ? `https://www.zigbee2mqtt.io/images/devices/${m.replace(/\//g, '_')}.png`
@@ -667,6 +665,7 @@ class Z2MPanel extends HTMLElement {
       this._bindEvents();
       this._load();
       this._startEventListener();
+      checkForUpdate();
     }
   }
 
@@ -1049,7 +1048,10 @@ class Z2MPanel extends HTMLElement {
     const battHtml = (d.batt !== null && !isNaN(d.batt))
       ? `<div class="dev-batt ${d.batt < 20 ? 'low' : d.batt < 50 ? 'med' : 'ok'}">${d.batt < 20 ? '🪫' : '🔋'} ${d.batt}%</div>`
       : '';
-
+    const lastSeenHtml = d.lastSeen
+      ? `<div class="dev-lastseen ${ageClass(d.lastSeen)}">🕐 ${timeAgo(d.lastSeen)}</div>`
+      : '';
+    
     card.innerHTML = `
       <div class="dev-head">
         <div class="dev-info">

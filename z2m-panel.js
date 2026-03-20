@@ -1,12 +1,12 @@
 // Z2M Panel — panel_custom Web Component
-// v2.1.0
+// v2.1.1
 // Copiar a /config/www/z2m-panel.js
 // Registrar en configuration.yaml como panel_custom
 
 // Bridge ID se detecta automáticamente buscando el dispositivo Z2M Bridge
 // No hay que hardcodearlo — funciona en cualquier instancia de HA
 let BRIDGE_ID = null;
-const VER = 'v2.1.0';
+const VER = 'v2.1.1';
 
 // Cache busting: invalida la caché del navegador automáticamente
 // Añade ?v=VERSION a la URL del script en el configuration.yaml de forma efectiva
@@ -444,9 +444,16 @@ const HTML = `
 <div id="root">
   <div id="navbar">
     <div class="nav-left">
-      <div class="bridge-dot" id="dot"></div>
-      <span class="nav-status" id="bridge-txt">Conectando…</span>
-      <span class="nav-ver">${VER}</span>
+      <button class="back-btn" id="btn-back" title="Volver a Home Assistant">‹</button>
+      <div class="nav-title-wrap">
+        <span class="nav-title-main">Zigbee2MQTT</span>
+        <span class="nav-title-sub">
+          <div class="bridge-dot" id="dot"></div>
+          <span id="bridge-txt">Conectando…</span>
+          <span style="opacity:.4">·</span>
+          <span>${VER}</span>
+        </span>
+      </div>
     </div>
     <div class="nav-right">
       <button class="theme-toggle" id="theme-btn" title="Cambiar tema">

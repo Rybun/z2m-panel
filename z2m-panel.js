@@ -1,5 +1,5 @@
 // Z2M Panel — panel_custom Web Component
-// v2.12.0
+// v2.13.0
 // Copiar a /config/www/z2m-panel.js
 // Registrar en configuration.yaml como panel_custom
 
@@ -28,7 +28,7 @@ function ageClass(date) {
 // Bridge ID se detecta automáticamente buscando el dispositivo Z2M Bridge
 // No hay que hardcodearlo — funciona en cualquier instancia de HA
 let BRIDGE_ID = null;
-const VER = 'v2.12.0';
+const VER = 'v2.13.0';
 
 // Cache busting: detecta si hay una versión más nueva del archivo en disco
 // (ocurre tras una actualización de HACS) y fuerza una recarga sin caché.
@@ -145,7 +145,7 @@ const CSS = `
 .nav-btn:active{transform:scale(.92)}
 .pair-btn{display:flex;align-items:center;gap:5px;padding:6px 14px;border-radius:var(--rp);
   border:none;background:var(--tint);color:#fff;font-family:inherit;font-size:.78rem;
-  font-weight:600;cursor:pointer;
+  font-weight:600;cursor:pointer;min-width:90px;justify-content:center;
   transition:background .45s cubic-bezier(.4,0,.2,1),box-shadow .45s,transform .15s,opacity .15s}
 .pair-btn:hover{opacity:.88}
 .pair-btn:active{transform:scale(.95)}
@@ -546,10 +546,10 @@ main{padding:18px 14px;max-width:1200px;margin:0 auto}
   100%{transform:translate(-50%,-50%) scale(1);opacity:0;}
 }
 #pair-ripple{
-  display:none;position:fixed;inset:0;pointer-events:none;
-  z-index:1;overflow:hidden;
+  visibility:hidden;position:fixed;inset:0;pointer-events:none;
+  z-index:1;overflow:hidden;contain:layout style;
 }
-#pair-ripple.on{display:block;}
+#pair-ripple.on{visibility:visible;}
 .pr-ring{
   position:absolute;
   top:calc(100% - 42px);left:50%;
@@ -558,6 +558,7 @@ main{padding:18px 14px;max-width:1200px;margin:0 auto}
   border:100px solid rgba(10,132,255,.55);
   transform:translate(-50%,-50%) scale(0);
   animation:radarRing 5s ease-out infinite;
+  will-change:transform,opacity;
 }
 .pr-ring:nth-child(1){animation-delay:0s;}
 .pr-ring:nth-child(2){animation-delay:1.67s;border-color:rgba(10,132,255,.38);}
@@ -754,6 +755,7 @@ class Z2MPanel extends HTMLElement {
     this._mqttStateWs = null;  // WebSocket persistente para LQ/last_seen en tiempo real
     this._bridgeRestartTime = null;  // Tiempo del último reinicio de HA (para filtrar last_seen)
     this._prePairUnnamed = new Set();  // IDs sin nombre existentes ANTES de empezar a buscar
+    this._pairFirstRenderDone = false; // true tras el primer _renderNew() durante un pairing activo
   }
 
   set hass(hass) {
@@ -1215,9 +1217,17 @@ class Z2MPanel extends HTMLElement {
       grid.appendChild(card);
     });
     // Confetti solo si apareció un dispositivo que NO existía antes de empezar a buscar
-    if (newCardAdded && this._pairActive) {
-      const trulyNew = nd.some(d => !existing.has(`nc-${d.id}`) && !this._prePairUnnamed.has(d.id));
-      if (trulyNew) this._spawnConfetti();
+    if (this._pairActive) {
+      if (!this._pairFirstRenderDone) {
+        // Primera vez que renderizamos con pairing activo: capturar snapshot real de _devices
+        // (puede ser un reload mientras ya había pairing → _devices ya tiene los datos frescos)
+        this._prePairUnnamed = new Set(nd.map(d => d.id));
+        this._pairFirstRenderDone = true;
+        // No confetti en esta pasada — todos los dispositivos ya existían
+      } else if (newCardAdded) {
+        const trulyNew = nd.some(d => !existing.has(`nc-${d.id}`) && !this._prePairUnnamed.has(d.id));
+        if (trulyNew) this._spawnConfetti();
+      }
     }
   }
 
@@ -1384,8 +1394,9 @@ class Z2MPanel extends HTMLElement {
     this._pairActive = true;
     // Solo tocar el DOM de UI en la primera activación para evitar parpadeos
     if (firstActivation) {
-      // Capturar qué dispositivos sin nombre ya existían ANTES de empezar a buscar
-      this._prePairUnnamed = new Set(this._devices.filter(d => this._isIEEE(d.name)).map(d => d.id));
+      // Resetear snapshot — se poblará en el primer _renderNew() cuando _devices ya esté actualizado
+      this._prePairUnnamed = new Set();
+      this._pairFirstRenderDone = false;
       this._$('permit-bar').classList.remove('leaving');
       this._$('permit-bar').classList.add('on');
       this._$('pair-ripple').classList.add('on');
@@ -1406,6 +1417,8 @@ class Z2MPanel extends HTMLElement {
 
   _hidePairBanner() {
     this._pairActive = false;
+    this._pairFirstRenderDone = false;
+    this._prePairUnnamed = new Set();
     const bar = this._$('permit-bar');
     if (bar) {
       bar.classList.add('leaving');

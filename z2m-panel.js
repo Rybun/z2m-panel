@@ -1,5 +1,5 @@
 // Z2M Panel — panel_custom Web Component
-// v2.18.0
+// v2.19.0
 // Copiar a /config/www/z2m-panel.js
 // Registrar en configuration.yaml como panel_custom
 
@@ -28,7 +28,7 @@ function ageClass(date) {
 // Bridge ID se detecta automáticamente buscando el dispositivo Z2M Bridge
 // No hay que hardcodearlo — funciona en cualquier instancia de HA
 let BRIDGE_ID = null;
-const VER = 'v2.18.0';
+const VER = 'v2.19.0';
 
 // Cache busting: detecta si hay una versión más nueva del archivo en disco
 // (ocurre tras una actualización de HACS) y fuerza una recarga sin caché.
@@ -152,7 +152,7 @@ const CSS = `
 .pair-btn:disabled{opacity:.45;cursor:not-allowed;transform:none}
 /* ── PERMIT-BAR: píldora azul fija en el pie (no mueve el layout) ── */
 #permit-bar{
-  display:none;
+  display:flex;visibility:hidden;opacity:0;pointer-events:none;
   position:fixed;bottom:22px;left:50%;transform:translateX(-50%);
   z-index:200;
   background:rgba(0,18,52,.92);
@@ -162,16 +162,17 @@ const CSS = `
   align-items:center;gap:14px;
   white-space:nowrap;
   box-shadow:0 6px 32px rgba(0,0,0,.5),0 0 0 1px rgba(10,132,255,.2),0 0 24px rgba(10,132,255,.18);
-  animation:pillIn .3s cubic-bezier(.34,1.56,.64,1);
 }
 :host([theme="light"]) #permit-bar{
   background:rgba(232,243,255,.96);
   border-color:rgba(0,122,255,.45);
   box-shadow:0 4px 20px rgba(0,0,0,.10),0 0 0 1px rgba(0,122,255,.15);}
-#permit-bar.on{display:flex}
+#permit-bar.on{visibility:visible;opacity:1;pointer-events:auto;animation:pillIn .3s cubic-bezier(.34,1.56,.64,1);}
 @keyframes pillIn{from{opacity:0;transform:translateX(-50%) translateY(12px) scale(.92)}to{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}}
 @keyframes pillOut{from{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}to{opacity:0;transform:translateX(-50%) translateY(14px) scale(.88)}}
-#permit-bar.leaving{display:flex;animation:pillOut .32s cubic-bezier(.4,0,.2,1) forwards;}
+#permit-bar.leaving{visibility:visible;pointer-events:none;animation:pillOut .32s cubic-bezier(.4,0,.2,1) forwards;}
+/* Suprimir animaciones/transiciones al restaurar estado inicial (recarga) */
+.z2m-no-anim{transition:none!important;animation:none!important;}
 .permit-icon{font-size:1.3rem;line-height:1;flex-shrink:0;}
 .permit-content{display:flex;flex-direction:column;gap:2px;align-items:center;}
 .permit-title{font-size:.82rem;font-weight:700;color:var(--tint);line-height:1.1;}
@@ -772,11 +773,22 @@ class Z2MPanel extends HTMLElement {
     if (!this._loaded) {
       this._loaded = true;
       this._render();
-      // Restaurar estado del botón antes de que _load() resuelva — evita el flash
+      // Restaurar estado de pairing ANTES de que _load() resuelva — evita cualquier flash
       if (sessionStorage.getItem('z2m-pairing') === '1') {
+        this._pairActive = true; // evita que _showPairBanner() haga cambios DOM después
         const pb = this._$('btn-pair');
         pb.textContent = '⏹ Detener';
         pb.classList.add('pairing');
+        pb.disabled = false;
+        // Mostrar permit-bar y pair-ripple sin animación de entrada
+        const bar    = this._$('permit-bar');
+        const ripple = this._$('pair-ripple');
+        bar.classList.add('z2m-no-anim', 'on');
+        ripple.classList.add('z2m-no-anim', 'on');
+        requestAnimationFrame(() => {
+          bar.classList.remove('z2m-no-anim');
+          ripple.classList.remove('z2m-no-anim');
+        });
       }
       this._initTheme();
       this._bindEvents();

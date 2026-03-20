@@ -1,5 +1,5 @@
 // Z2M Panel — panel_custom Web Component
-// v2.19.0
+// v2.20.0
 // Copiar a /config/www/z2m-panel.js
 // Registrar en configuration.yaml como panel_custom
 
@@ -28,7 +28,7 @@ function ageClass(date) {
 // Bridge ID se detecta automáticamente buscando el dispositivo Z2M Bridge
 // No hay que hardcodearlo — funciona en cualquier instancia de HA
 let BRIDGE_ID = null;
-const VER = 'v2.19.0';
+const VER = 'v2.20.0';
 
 // Cache busting: detecta si hay una versión más nueva del archivo en disco
 // (ocurre tras una actualización de HACS) y fuerza una recarga sin caché.
@@ -579,12 +579,15 @@ main{padding:18px 14px;max-width:1200px;margin:0 auto}
 :host([theme="light"]) .pr-ring:nth-child(3){border-color:rgba(0,122,255,.22);}
 
 /* ── PAIR BUTTON pairing state ── */
-@keyframes pairPulse{0%,100%{box-shadow:0 0 0 0 rgba(255,69,58,.5)}50%{box-shadow:0 0 0 8px rgba(255,69,58,0)}}
-.pair-btn.pairing{
-  background:var(--red)!important;
-  animation:pairPulse 1.4s ease-in-out infinite;
-  transition:background .4s ease;
+/* Pulso con ::after + transform/opacity (composited, sin repaints del navbar) */
+.pair-btn{position:relative;}
+.pair-btn.pairing{background:var(--red)!important;transition:background .4s ease;}
+.pair-btn.pairing::after{
+  content:'';position:absolute;inset:0;border-radius:var(--rp);
+  background:var(--red);
+  animation:pairPulse 1.4s ease-in-out infinite;pointer-events:none;
 }
+@keyframes pairPulse{0%,100%{transform:scale(1);opacity:.55;}50%{transform:scale(1.65);opacity:0;}}
 
 /* ── FADE OUT para eliminar cards ── */
 @keyframes cardFadeOut{from{opacity:1;transform:scale(1)}to{opacity:0;transform:scale(.9)}}
@@ -1088,6 +1091,8 @@ class Z2MPanel extends HTMLElement {
   }
 
   async _load(showSpinner = false) {
+    if (this._loadInProgress) return;
+    this._loadInProgress = true;
     // Solo mostrar spinner si no hay grid aún (primera carga) o si se pide explícitamente
     const hasGrid = !!this.shadowRoot.getElementById('dev-grid');
     if (!hasGrid || showSpinner) {
@@ -1193,6 +1198,8 @@ class Z2MPanel extends HTMLElement {
     } catch(e) {
       console.error(e);
       this._$('dev-container').innerHTML = `<div class="empty"><div class="ico">⚠️</div><p>${e.message}</p></div>`;
+    } finally {
+      this._loadInProgress = false;
     }
   }
 

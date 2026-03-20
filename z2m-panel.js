@@ -1,5 +1,5 @@
 // Z2M Panel — panel_custom Web Component
-// v2.7.1
+// v2.8.0
 // Copiar a /config/www/z2m-panel.js
 // Registrar en configuration.yaml como panel_custom
 
@@ -28,7 +28,7 @@ function ageClass(date) {
 // Bridge ID se detecta automáticamente buscando el dispositivo Z2M Bridge
 // No hay que hardcodearlo — funciona en cualquier instancia de HA
 let BRIDGE_ID = null;
-const VER = 'v2.7.1';
+const VER = 'v2.8.0';
 
 // Cache busting: detecta si hay una versión más nueva del archivo en disco
 // (ocurre tras una actualización de HACS) y fuerza una recarga sin caché.
@@ -145,20 +145,32 @@ const CSS = `
 .nav-btn:active{transform:scale(.92)}
 .pair-btn{display:flex;align-items:center;gap:5px;padding:6px 14px;border-radius:var(--rp);
   border:none;background:var(--tint);color:#fff;font-family:inherit;font-size:.78rem;
-  font-weight:600;cursor:pointer;transition:all .15s}
+  font-weight:600;cursor:pointer;
+  transition:background .45s cubic-bezier(.4,0,.2,1),box-shadow .45s,transform .15s,opacity .15s}
 .pair-btn:hover{opacity:.88}
 .pair-btn:active{transform:scale(.95)}
 .pair-btn:disabled{opacity:.45;cursor:not-allowed;transform:none}
-#permit-bar{display:none;background:var(--yellow-bg);
-  border-bottom:.5px solid rgba(255,214,10,.2);padding:10px 18px;
-  align-items:center;justify-content:space-between;gap:12px}
+/* ── PERMIT-BAR: píldora fija en el pie (no mueve el layout) ── */
+#permit-bar{
+  display:none;
+  position:fixed;bottom:22px;left:50%;transform:translateX(-50%);
+  z-index:200;
+  background:rgba(28,21,0,.82);
+  border:1px solid rgba(255,214,10,.45);
+  backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+  border-radius:50px;padding:9px 18px;
+  align-items:center;gap:10px;
+  white-space:nowrap;box-shadow:0 6px 28px rgba(0,0,0,.35);
+  animation:pillIn .3s cubic-bezier(.34,1.56,.64,1);
+}
+:host([theme="light"]) #permit-bar{background:rgba(255,248,210,.92);border-color:rgba(180,130,0,.45)}
 #permit-bar.on{display:flex}
-.permit-lbl{display:flex;align-items:center;gap:7px;font-size:.8rem;font-weight:500;color:var(--yellow)}
-#permit-cd{font-size:.88rem;font-weight:600;color:var(--yellow);
-  font-variant-numeric:tabular-nums;min-width:36px;text-align:right}
-.stop-btn{padding:5px 12px;border-radius:var(--rp);border:none;background:var(--red-bg);
-  color:var(--red);font-family:inherit;font-size:.76rem;font-weight:600;cursor:pointer;transition:all .15s}
-.stop-btn:hover{background:var(--red);color:#fff}
+@keyframes pillIn{from{opacity:0;transform:translateX(-50%) translateY(12px) scale(.92)}to{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}}
+.permit-lbl{display:flex;align-items:center;gap:6px;font-size:.78rem;font-weight:500;color:var(--yellow)}
+:host([theme="light"]) .permit-lbl{color:#7a5900}
+#permit-cd{font-size:.82rem;font-weight:700;color:var(--yellow);
+  font-variant-numeric:tabular-nums;min-width:30px;text-align:right}
+:host([theme="light"]) #permit-cd{color:#7a5900}
 main{padding:18px 14px;max-width:1200px;margin:0 auto}
 .sec-hdr{display:flex;align-items:center;justify-content:space-between;padding:0 4px;margin-bottom:8px}
 .sec-lbl{font-size:.7rem;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--text2)}
@@ -541,14 +553,9 @@ main{padding:18px 14px;max-width:1200px;margin:0 auto}
 .pr-ring:nth-child(1){animation-delay:0s;}
 .pr-ring:nth-child(2){animation-delay:1s;border-color:rgba(10,132,255,.38);}
 .pr-ring:nth-child(3){animation-delay:2s;border-color:rgba(10,132,255,.22);}
-
-/* Relleno tenue del radar */
-.pr-fill{
-  position:absolute;bottom:0;left:50%;
-  width:200vmax;height:200vmax;border-radius:50%;
-  background:radial-gradient(ellipse at center bottom,rgba(10,132,255,.06) 0%,transparent 70%);
-  transform:translate(-50%,0);
-}
+:host([theme="light"]) .pr-ring{border-color:rgba(0,122,255,.75);}
+:host([theme="light"]) .pr-ring:nth-child(2){border-color:rgba(0,122,255,.52);}
+:host([theme="light"]) .pr-ring:nth-child(3){border-color:rgba(0,122,255,.32);}
 
 /* ── PAIR BUTTON pairing state ── */
 @keyframes pairPulse{0%,100%{box-shadow:0 0 0 0 rgba(255,69,58,.5)}50%{box-shadow:0 0 0 8px rgba(255,69,58,0)}}
@@ -600,7 +607,7 @@ const HTML = `
       <button class="pair-btn" id="btn-pair">📡 Buscar</button>
     </div>
   </div>
-  <div id="pair-ripple"><div class="pr-fill"></div><div class="pr-ring"></div><div class="pr-ring"></div><div class="pr-ring"></div></div>
+  <div id="pair-ripple"><div class="pr-ring"></div><div class="pr-ring"></div><div class="pr-ring"></div></div>
   <div id="joining-toast"><div class="joining-spinner"></div><span id="joining-txt">Dispositivo detectado…</span></div>
   <div id="permit-bar">
     <div class="permit-lbl">📡 Pon el dispositivo en modo pairing</div>
@@ -657,7 +664,7 @@ const HTML = `
         <div class="alert-thumb" id="alert-thumb">📡</div>
       </div>
       <div class="alert-body">
-        <div class="alert-tag">⚡ Nuevo dispositivo detectado</div>
+        <div class="alert-tag">¡Viva! 🎉 ¡Se ha emparejado!</div>
         <div class="alert-title" id="alert-title">Dispositivo sin nombre</div>
         <div class="alert-sub" id="alert-sub">Toca para asignar nombre</div>
       </div>
@@ -714,6 +721,8 @@ class Z2MPanel extends HTMLElement {
     this._alertTimer = null;
     this._eventWs = null;  // WebSocket para eventos en tiempo real de Z2M
     this._popupWs = null;  // WebSocket para estados en tiempo real del popup
+    this._mqttStateWs = null;  // WebSocket persistente para LQ/last_seen en tiempo real
+    this._bridgeRestartTime = null;  // Tiempo del último reinicio de HA (para filtrar last_seen)
   }
 
   set hass(hass) {
@@ -725,6 +734,7 @@ class Z2MPanel extends HTMLElement {
       this._bindEvents();
       this._load();
       this._startEventListener();
+      this._startMqttStateListener();
       checkForUpdate();
     }
   }
@@ -1040,6 +1050,9 @@ class Z2MPanel extends HTMLElement {
       const perm = sm['switch.zigbee2mqtt_bridge_permit_join'];
       const ptim = sm['sensor.zigbee2mqtt_bridge_permit_join_timeout'];
 
+      // Guardar hora del último reinicio de HA/bridge para filtrar last_seen falsos
+      if (conn?.last_changed) this._bridgeRestartTime = new Date(conn.last_changed);
+
       this._updateBridge(conn?.state === 'on');
       if (perm?.state === 'on' && !this._pairActive) {
         const rem = parseInt(ptim?.state);
@@ -1075,6 +1088,8 @@ class Z2MPanel extends HTMLElement {
             const s = sm[e.entity_id];
             if (!s) return;
             const t = new Date(s.last_changed);
+            // Ignorar timestamps que coinciden con el reinicio de HA (son artefactos, no actividad real)
+            if (this._isRestartTime(t)) return;
             if (!lastSeen || t > lastSeen) lastSeen = t;
           });
         }
@@ -1297,7 +1312,6 @@ class Z2MPanel extends HTMLElement {
         body: JSON.stringify({ entity_id: 'switch.zigbee2mqtt_bridge_permit_join' })
       });
       this._showPairBanner(254);
-      this._toast('ok', '📡 Buscando ~4 min');
     } catch {
       this._toast('err', 'Error al activar emparejamiento');
       this._$('btn-pair').disabled = false;
@@ -1310,7 +1324,6 @@ class Z2MPanel extends HTMLElement {
       body: JSON.stringify({ entity_id: 'switch.zigbee2mqtt_bridge_permit_join' })
     });
     this._hidePairBanner();
-    this._toast('ok', 'Emparejamiento desactivado');
   }
 
   _showPairBanner(secs) {
@@ -1876,6 +1889,61 @@ class Z2MPanel extends HTMLElement {
       }
     });
     observer.observe(popup, { attributes: true, attributeFilter: ['style'] });
+  }
+
+  // ── DETECTOR DE REINICIO DE HA ────────────────────────────────
+  // Devuelve true si la fecha está dentro de los 90s del último reinicio de HA/bridge
+  _isRestartTime(date) {
+    if (!this._bridgeRestartTime) return false;
+    return Math.abs(date.getTime() - this._bridgeRestartTime.getTime()) < 90000;
+  }
+
+  // ── LISTENER MQTT PERSISTENTE (LQ + last_seen en tiempo real) ─
+  _startMqttStateListener() {
+    if (this._mqttStateWs) { try { this._mqttStateWs.close(); } catch(e){} }
+    const wsUrl = this._haUrl.replace(/^http/, 'ws') + '/api/websocket';
+    const ws = new WebSocket(wsUrl);
+    this._mqttStateWs = ws;
+
+    ws.onmessage = ev => {
+      const m = JSON.parse(ev.data);
+      if (m.type === 'auth_required') {
+        ws.send(JSON.stringify({ type: 'auth', access_token: this._token }));
+      } else if (m.type === 'auth_ok') {
+        ws.send(JSON.stringify({ id: 30, type: 'mqtt/subscribe', topic: 'zigbee2mqtt/+' }));
+      } else if (m.type === 'event' && m.event) {
+        const topic = m.event.topic || '';
+        if (!topic.startsWith('zigbee2mqtt/') || topic.startsWith('zigbee2mqtt/bridge')) return;
+        const friendlyName = topic.slice('zigbee2mqtt/'.length);
+        try {
+          const state = JSON.parse(m.event.payload);
+          const dev = this._devices.find(d => d.name === friendlyName);
+          if (!dev) return;
+          let changed = false;
+          if (typeof state.linkquality === 'number') {
+            dev.lq = state.linkquality;
+            changed = true;
+          }
+          if (state.last_seen) {
+            const t = new Date(state.last_seen);
+            if (!isNaN(t.getTime()) && !this._isRestartTime(t)) {
+              dev.lastSeen = t;
+              changed = true;
+            }
+          }
+          if (changed) {
+            const card = this.shadowRoot.getElementById(`dc-${dev.id}`);
+            if (card) this._patchCard(dev, card);
+          }
+        } catch(e) {}
+      }
+    };
+    ws.onerror = () => {};
+    ws.onclose = () => {
+      if (this._mqttStateWs === ws) {
+        setTimeout(() => { if (this._loaded) this._startMqttStateListener(); }, 5000);
+      }
+    };
   }
 
   // ── MODAL Y TOAST ─────────────────────────────────────────────

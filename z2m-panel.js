@@ -1,5 +1,5 @@
 // Z2M Panel — panel_custom Web Component
-// v2.16.0
+// v2.17.0
 // Copiar a /config/www/z2m-panel.js
 // Registrar en configuration.yaml como panel_custom
 
@@ -28,7 +28,7 @@ function ageClass(date) {
 // Bridge ID se detecta automáticamente buscando el dispositivo Z2M Bridge
 // No hay que hardcodearlo — funciona en cualquier instancia de HA
 let BRIDGE_ID = null;
-const VER = 'v2.16.0';
+const VER = 'v2.17.0';
 
 // Cache busting: detecta si hay una versión más nueva del archivo en disco
 // (ocurre tras una actualización de HACS) y fuerza una recarga sin caché.
@@ -189,7 +189,9 @@ main{padding:18px 14px;max-width:1200px;margin:0 auto}
 #new-section.on{display:block}
 .new-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px}
 .new-card{background:var(--bg2);border-radius:var(--rc);padding:14px;
-  border:1px solid rgba(255,214,10,.18);animation:fadeUp .3s ease both}
+  border:1px solid rgba(255,214,10,.18);animation:fadeUp .3s ease both;
+  cursor:pointer;transition:transform .15s,box-shadow .15s}
+.new-card:hover{transform:translateY(-2px);box-shadow:0 6px 24px rgba(0,0,0,.25)}
 :host([theme="light"]) .new-card{border-color:rgba(255,149,0,.18)}
 .new-top{display:flex;align-items:center;gap:12px;margin-bottom:12px}
 .new-thumb{width:48px;height:48px;border-radius:12px;flex-shrink:0;background:var(--yellow-bg);
@@ -1219,7 +1221,8 @@ class Z2MPanel extends HTMLElement {
         </div>
         <button class="btn-assign">✏️ Asignar nombre</button>`;
       card.querySelector('.new-top').insertBefore(thumbDiv, card.querySelector('.new-meta'));
-      card.querySelector('.btn-assign').addEventListener('click', () => this._openAssign(d.name));
+      card.querySelector('.btn-assign').addEventListener('click', (e) => { e.stopPropagation(); this._openAssign(d.name); });
+      card.addEventListener('click', () => this._openEntPopup(d));
       grid.appendChild(card);
     });
     // Confetti solo si apareció un dispositivo que NO existía antes de empezar a buscar
@@ -1724,7 +1727,7 @@ class Z2MPanel extends HTMLElement {
     thumb.innerHTML = '';
     thumb.appendChild(this._thumbEl(d.model, d.modelId));
 
-    renBtn.onclick = (e) => { e.stopPropagation(); popup.style.display='none'; this._openRename(d.name); };
+    renBtn.onclick = (e) => { e.stopPropagation(); popup.style.display='none'; this._isIEEE(d.name) ? this._openAssign(d.name) : this._openRename(d.name); };
     delBtn.onclick = (e) => { e.stopPropagation(); popup.style.display='none'; this._openDelete(d); };
 
     list.innerHTML = '<div class="loading" style="min-height:100px"><div class="spinner"></div></div>';

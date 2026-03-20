@@ -1,5 +1,5 @@
 // Z2M Panel — panel_custom Web Component
-// v2.10.0
+// v2.11.0
 // Copiar a /config/www/z2m-panel.js
 // Registrar en configuration.yaml como panel_custom
 
@@ -28,7 +28,7 @@ function ageClass(date) {
 // Bridge ID se detecta automáticamente buscando el dispositivo Z2M Bridge
 // No hay que hardcodearlo — funciona en cualquier instancia de HA
 let BRIDGE_ID = null;
-const VER = 'v2.10.0';
+const VER = 'v2.11.0';
 
 // Cache busting: detecta si hay una versión más nueva del archivo en disco
 // (ocurre tras una actualización de HACS) y fuerza una recarga sin caché.
@@ -170,6 +170,8 @@ const CSS = `
   box-shadow:0 4px 20px rgba(0,0,0,.10),0 0 0 1px rgba(0,122,255,.15);}
 #permit-bar.on{display:flex}
 @keyframes pillIn{from{opacity:0;transform:translateX(-50%) translateY(12px) scale(.92)}to{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}}
+@keyframes pillOut{from{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}to{opacity:0;transform:translateX(-50%) translateY(14px) scale(.88)}}
+#permit-bar.leaving{display:flex;animation:pillOut .32s cubic-bezier(.4,0,.2,1) forwards;}
 .permit-icon{font-size:1.3rem;line-height:1;flex-shrink:0;}
 .permit-content{display:flex;flex-direction:column;gap:2px;}
 .permit-title{font-size:.82rem;font-weight:700;color:var(--tint);line-height:1.1;}
@@ -537,10 +539,10 @@ main{padding:18px 14px;max-width:1200px;margin:0 auto}
 ::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:2px}
 @media(max-width:500px){main{padding:14px 10px}#navbar{padding:0 12px}}
 
-/* ── RADAR DE PAIRING (centro en la píldora) ── */
+/* ── RADAR DE PAIRING (estilo sonar — lento y dramático) ── */
 @keyframes radarRing{
-  0%  {transform:translate(-50%,-50%) scale(0);opacity:1;}
-  55% {opacity:.65;}
+  0%  {transform:translate(-50%,-50%) scale(0);opacity:.75;}
+  40% {opacity:.55;}
   100%{transform:translate(-50%,-50%) scale(1);opacity:0;}
 }
 #pair-ripple{
@@ -553,16 +555,16 @@ main{padding:18px 14px;max-width:1200px;margin:0 auto}
   top:calc(100% - 42px);left:50%;
   width:340vmax;height:340vmax;
   border-radius:50%;
-  border:3px solid rgba(10,132,255,.85);
+  border:100px solid rgba(10,132,255,.55);
   transform:translate(-50%,-50%) scale(0);
-  animation:radarRing 2s ease-out infinite;
+  animation:radarRing 5s ease-out infinite;
 }
 .pr-ring:nth-child(1){animation-delay:0s;}
-.pr-ring:nth-child(2){animation-delay:.67s;border-color:rgba(10,132,255,.6);}
-.pr-ring:nth-child(3){animation-delay:1.33s;border-color:rgba(10,132,255,.35);}
-:host([theme="light"]) .pr-ring{border-color:rgba(0,122,255,.9);}
-:host([theme="light"]) .pr-ring:nth-child(2){border-color:rgba(0,122,255,.65);}
-:host([theme="light"]) .pr-ring:nth-child(3){border-color:rgba(0,122,255,.42);}
+.pr-ring:nth-child(2){animation-delay:1.67s;border-color:rgba(10,132,255,.38);}
+.pr-ring:nth-child(3){animation-delay:3.33s;border-color:rgba(10,132,255,.22);}
+:host([theme="light"]) .pr-ring{border-color:rgba(0,122,255,.55);}
+:host([theme="light"]) .pr-ring:nth-child(2){border-color:rgba(0,122,255,.38);}
+:host([theme="light"]) .pr-ring:nth-child(3){border-color:rgba(0,122,255,.22);}
 
 /* ── PAIR BUTTON pairing state ── */
 @keyframes pairPulse{0%,100%{box-shadow:0 0 0 0 rgba(255,69,58,.5)}50%{box-shadow:0 0 0 8px rgba(255,69,58,0)}}
@@ -1084,17 +1086,19 @@ class Z2MPanel extends HTMLElement {
       this._updateBridge(conn?.state === 'on');
       if (perm?.state === 'on') {
         const rem = parseInt(ptim?.state);
-        const realRem = Number.isFinite(rem) && rem > 0 ? rem : 60;
+        const realRem = Number.isFinite(rem) && rem > 0 ? rem : null;
         if (!this._pairActive) {
-          this._showPairBanner(realRem);
-        } else {
-          // Sincronizar si la diferencia con el sensor es significativa (>8s)
+          // Primera vez: arrancar con el valor real o 60 si no hay dato
+          this._showPairBanner(realRem ?? 60);
+        } else if (realRem !== null) {
+          // Ya activo: sincronizar solo si el sensor da un valor válido Y difiere >8s
           const cdEl = this._$('permit-cd');
           const shown = cdEl ? parseInt(cdEl.textContent) : NaN;
           if (!Number.isFinite(shown) || Math.abs(shown - realRem) > 8) {
             this._showPairBanner(realRem);
           }
         }
+        // Si realRem es null y ya está activo: dejar el timer como está
       }
 
       // Detectar bridge ID si no está disponible aún
@@ -1186,8 +1190,10 @@ class Z2MPanel extends HTMLElement {
     });
 
     // Añadir los nuevos
+    let newCardAdded = false;
     nd.forEach(d => {
       if (existing.has(`nc-${d.id}`)) return; // ya existe
+      newCardAdded = true;
       const card = document.createElement('div');
       card.className = 'new-card';
       card.id = `nc-${d.id}`;
@@ -1207,6 +1213,7 @@ class Z2MPanel extends HTMLElement {
       card.querySelector('.btn-assign').addEventListener('click', () => this._openAssign(d.name));
       grid.appendChild(card);
     });
+    if (newCardAdded && this._pairActive) this._spawnConfetti();
   }
 
   // Grid principal — actualización suave: patch en los existentes, añade los nuevos, elimina los borrados
@@ -1368,13 +1375,18 @@ class Z2MPanel extends HTMLElement {
   }
 
   _showPairBanner(secs) {
+    const firstActivation = !this._pairActive;
     this._pairActive = true;
-    this._$('permit-bar').classList.add('on');
-    this._$('pair-ripple').classList.add('on');
-    const pb = this._$('btn-pair');
-    pb.textContent = '⏹ Detener';
-    pb.classList.add('pairing');
-    pb.disabled = false;
+    // Solo tocar el DOM de UI en la primera activación para evitar parpadeos
+    if (firstActivation) {
+      this._$('permit-bar').classList.remove('leaving');
+      this._$('permit-bar').classList.add('on');
+      this._$('pair-ripple').classList.add('on');
+      const pb = this._$('btn-pair');
+      pb.textContent = '⏹ Detener';
+      pb.classList.add('pairing');
+      pb.disabled = false;
+    }
     let rem = Number.isFinite(secs) && secs > 0 ? secs : 60;
     clearInterval(this._pairTimer);
     this._$('permit-cd').textContent = rem + 's';
@@ -1387,7 +1399,11 @@ class Z2MPanel extends HTMLElement {
 
   _hidePairBanner() {
     this._pairActive = false;
-    this._$('permit-bar').classList.remove('on');
+    const bar = this._$('permit-bar');
+    if (bar) {
+      bar.classList.add('leaving');
+      setTimeout(() => bar.classList.remove('on', 'leaving'), 350);
+    }
     this._$('pair-ripple').classList.remove('on');
     const pb = this._$('btn-pair');
     pb.textContent = '📡 Buscar';

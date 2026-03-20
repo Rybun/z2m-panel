@@ -1,10 +1,12 @@
 // Z2M Panel — panel_custom Web Component
-// v1.5.0
+// v1.9.0
 // Copiar a /config/www/z2m-panel.js
 // Registrar en configuration.yaml como panel_custom
 
-const BRIDGE_ID = 'd6d94d04da6326f657796d8e02d0cd69';
-const VER = 'v1.8.0';
+// Bridge ID se detecta automáticamente buscando el dispositivo Z2M Bridge
+// No hay que hardcodearlo — funciona en cualquier instancia de HA
+let BRIDGE_ID = null;
+const VER = 'v1.9.0';
 
 const imgUrl = m => m
   ? `https://www.zigbee2mqtt.io/images/devices/${m.replace(/\//g, '_')}.png`
@@ -619,6 +621,22 @@ class Z2MPanel extends HTMLElement {
     return img;
   }
 
+  // ── DETECTAR BRIDGE ID ────────────────────────────────────────
+  async _detectBridgeId() {
+    if (BRIDGE_ID) return BRIDGE_ID;
+    // Busca en el device registry el dispositivo que sea el bridge de Z2M
+    const ws = await this._wsCall('config/device_registry/list');
+    if (!ws?.result) return null;
+    const bridge = ws.result.find(d =>
+      d.manufacturer === 'Zigbee2MQTT' &&
+      d.model === 'Bridge' &&
+      d.via_device_id === null
+    );
+    BRIDGE_ID = bridge?.id || null;
+    console.log('[Z2M Panel] Bridge ID detectado:', BRIDGE_ID);
+    return BRIDGE_ID;
+  }
+
   // ── LOAD ──────────────────────────────────────────────────────
   // Obtiene la lista real de dispositivos Z2M desde el topic MQTT del bridge
   // Esto da el model ID real (ej: "TS011F") en vez del nombre descriptivo de HA
@@ -693,6 +711,8 @@ class Z2MPanel extends HTMLElement {
       this._updateBridge(conn?.state === 'on');
       if (perm?.state === 'on' && !this._pairTimer) this._showPairBanner(parseInt(ptim?.state || '60'));
 
+      // Detectar bridge ID si no está disponible aún
+      if (!BRIDGE_ID) await this._detectBridgeId();
       const z2m = wsDevs.result.filter(d => d.via_device_id === BRIDGE_ID);
 
       this._devices = z2m.map(d => {

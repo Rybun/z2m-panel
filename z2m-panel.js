@@ -1,5 +1,5 @@
 // Z2M Panel — panel_custom Web Component
-// v2.5.0
+// v2.6.0
 // Copiar a /config/www/z2m-panel.js
 // Registrar en configuration.yaml como panel_custom
 
@@ -28,7 +28,7 @@ function ageClass(date) {
 // Bridge ID se detecta automáticamente buscando el dispositivo Z2M Bridge
 // No hay que hardcodearlo — funciona en cualquier instancia de HA
 let BRIDGE_ID = null;
-const VER = 'v2.5.0';
+const VER = 'v2.6.0';
 
 // Cache busting: detecta si hay una versión más nueva del archivo en disco
 // (ocurre tras una actualización de HACS) y fuerza una recarga sin caché.
@@ -516,7 +516,39 @@ main{padding:18px 14px;max-width:1200px;margin:0 auto}
 ::-webkit-scrollbar{width:4px}
 ::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:2px}
 @media(max-width:500px){main{padding:14px 10px}#navbar{padding:0 12px}}
+
+/* ── RIPPLE DE PAIRING ── */
+@keyframes pairWave{
+  0%{transform:translateY(0) scaleX(1.15);opacity:0;}
+  8%{opacity:1;}
+  92%{opacity:.6;}
+  100%{transform:translateY(-110vh) scaleX(1.15);opacity:0;}
+}
+#pair-ripple{display:none;position:fixed;inset:0;pointer-events:none;z-index:51;overflow:hidden;}
+#pair-ripple.on{display:block;}
+.pr-wave{
+  position:absolute;left:-8%;width:116%;
+  border-radius:48% 52% 50% 50%;
+  animation:pairWave 3.6s ease-in-out infinite;
+}
+.pr-wave:nth-child(1){height:90px;bottom:-90px;animation-delay:0s;background:rgba(255,214,10,.07);}
+.pr-wave:nth-child(2){height:110px;bottom:-110px;animation-delay:1.2s;background:rgba(255,214,10,.05);}
+.pr-wave:nth-child(3){height:70px;bottom:-70px;animation-delay:2.4s;background:rgba(10,132,255,.04);}
+
+/* ── TOAST DE JOINING ── */
+#joining-toast{
+  display:none;position:fixed;bottom:28px;left:50%;transform:translateX(-50%);
+  background:var(--yellow-bg);border:1px solid rgba(255,214,10,.3);
+  color:var(--yellow);border-radius:var(--rp);
+  padding:10px 18px;font-size:.84rem;font-weight:600;z-index:9998;
+  animation:fadeUp .25s ease;white-space:nowrap;box-shadow:0 4px 20px rgba(0,0,0,.35);
+  display:none;align-items:center;gap:8px;
+}
+#joining-toast.on{display:flex;}
+.joining-spinner{width:14px;height:14px;border:2px solid rgba(255,214,10,.3);
+  border-top-color:var(--yellow);border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0;}
 `;
+
 
 const HTML = `
 <div id="root">
@@ -541,6 +573,8 @@ const HTML = `
       <button class="pair-btn" id="btn-pair">📡 Buscar</button>
     </div>
   </div>
+  <div id="pair-ripple"><div class="pr-wave"></div><div class="pr-wave"></div><div class="pr-wave"></div></div>
+  <div id="joining-toast"><div class="joining-spinner"></div><span id="joining-txt">Dispositivo detectado…</span></div>
   <div id="permit-bar">
     <div class="permit-lbl">📡 Pon el dispositivo en modo pairing</div>
     <div style="display:flex;align-items:center;gap:10px">
@@ -650,6 +684,7 @@ class Z2MPanel extends HTMLElement {
     this._pairTimer = null;
     this._renameFrom = null;
     this._deleteName = null;
+    this._deleteDevice = null;
     this._loaded = false;
     this._alertTimer = null;
     this._eventWs = null;  // WebSocket para eventos en tiempo real de Z2M
@@ -708,7 +743,10 @@ class Z2MPanel extends HTMLElement {
       } catch(e) {}
       window.history.back();
     });
-    this._$('btn-pair').addEventListener('click', () => this._startPair());
+    this._$('btn-pair').addEventListener('click', () => {
+      if (this._pairTimer) this._stopPair();
+      else this._startPair();
+    });
     this._$('btn-stop').addEventListener('click', () => this._stopPair());
     this._$('q').addEventListener('input', () => this._applyFilters());
 
@@ -853,59 +891,84 @@ class Z2MPanel extends HTMLElement {
   // ── LOAD ──────────────────────────────────────────────────────
   // Obtiene la lista real de dispositivos Z2M desde el topic MQTT del bridge
   // Esto da el model ID real (ej: "TS011F") en vez del nombre descriptivo de HA
+  // Obtiene datos de Z2M: modelos, last_seen real, y linkquality desde mensajes MQTT retenidos
   async _getZ2MDevices() {
+    const empty = { models: {}, lastSeen: {}, lq: {} };
     try {
-      // Suscribimos al topic zigbee2mqtt/bridge/devices via WS de HA
       const wsUrl = this._haUrl.replace(/^http/, 'ws') + '/api/websocket';
-      return await new Promise((ok, fail) => {
+      return await new Promise(ok => {
         const ws = new WebSocket(wsUrl);
-        let subId = 1, msgId = 2;
-        const t = setTimeout(() => { ws.close(); ok({}); }, 6000);
+        const models = {};         // ieee → model_id
+        const lastSeen = {};       // ieee → Date (de Z2M, no HA)
+        const lqMap = {};          // ieee → linkquality numérico
+        const friendlyToIeee = {}; // friendly_name → ieee
+        let resolveTimer = null;
+
+        const done = () => {
+          if (resolveTimer) clearTimeout(resolveTimer);
+          try { ws.close(); } catch(e) {}
+          ok({ models, lastSeen, lq: lqMap });
+        };
+
+        const globalTimeout = setTimeout(done, 7000);
+
         ws.onmessage = ev => {
           const m = JSON.parse(ev.data);
           if (m.type === 'auth_required') {
             ws.send(JSON.stringify({ type: 'auth', access_token: this._token }));
           } else if (m.type === 'auth_ok') {
-            // Suscribir al topic zigbee2mqtt/bridge/devices
-            ws.send(JSON.stringify({
-              id: subId, type: 'mqtt/subscribe', topic: 'zigbee2mqtt/bridge/devices'
-            }));
-            // También publicamos un request para que Z2M republique
+            // Suscribir a bridge/devices para modelos y last_seen
+            ws.send(JSON.stringify({ id: 1, type: 'mqtt/subscribe', topic: 'zigbee2mqtt/bridge/devices' }));
+            // Suscribir a tópicos de dispositivos (un nivel: friendly_name) para lq retenida
+            ws.send(JSON.stringify({ id: 2, type: 'mqtt/subscribe', topic: 'zigbee2mqtt/+' }));
+            // Pedir que Z2M republique bridge/devices
             setTimeout(() => {
               ws.send(JSON.stringify({
-                id: msgId, type: 'call_service',
-                domain: 'mqtt', service: 'publish',
+                id: 3, type: 'call_service', domain: 'mqtt', service: 'publish',
                 service_data: { topic: 'zigbee2mqtt/bridge/request/devices', payload: '' }
               }));
             }, 200);
-          } else if (m.type === 'event' && m.event && m.event.topic === 'zigbee2mqtt/bridge/devices') {
-            try {
-              const devices = JSON.parse(m.event.payload);
-              clearTimeout(t); ws.close();
-              // Construir mapa ieee_address → model real
-              const map = {};
-              devices.forEach(d => {
-                if (d.ieee_address && d.definition && d.definition.model) {
-                  // Guardar con y sin prefijo "zigbee2mqtt_" para cubrir ambos formatos
-                  map[d.ieee_address] = d.definition.model;
-                  map['zigbee2mqtt_' + d.ieee_address] = d.definition.model;
+          } else if (m.type === 'event' && m.event) {
+            const topic = m.event.topic || '';
+            if (topic === 'zigbee2mqtt/bridge/devices') {
+              try {
+                const devices = JSON.parse(m.event.payload);
+                devices.forEach(d => {
+                  if (!d.ieee_address) return;
+                  const ieee = d.ieee_address;
+                  if (d.definition?.model) {
+                    models[ieee] = d.definition.model;
+                    models['zigbee2mqtt_' + ieee] = d.definition.model;
+                  }
+                  if (d.last_seen) lastSeen[ieee] = new Date(d.last_seen);
+                  if (d.friendly_name) friendlyToIeee[d.friendly_name] = ieee;
+                });
+                // Esperar 1.2s para recopilar mensajes retenidos de dispositivos
+                clearTimeout(globalTimeout);
+                resolveTimer = setTimeout(done, 1200);
+              } catch(e) { done(); }
+            } else if (topic.startsWith('zigbee2mqtt/') && !topic.startsWith('zigbee2mqtt/bridge')) {
+              // Mensaje de estado de dispositivo — extraer linkquality si está presente
+              const friendlyName = topic.slice('zigbee2mqtt/'.length);
+              try {
+                const state = JSON.parse(m.event.payload);
+                if (typeof state.linkquality === 'number') {
+                  const ieee = friendlyToIeee[friendlyName];
+                  if (ieee) lqMap[ieee] = state.linkquality;
                 }
-              });
-              console.log('[Z2M Panel] bridge/devices recibido, devices:', devices.length);
-              console.log('[Z2M Panel] Primeros 3 model IDs:', devices.slice(0,3).map(d=>({ieee:d.ieee_address,model:d.definition?.model})));
-              ok(map);
-            } catch(e) { console.error('[Z2M Panel] Error parseando bridge/devices:', e); clearTimeout(t); ws.close(); ok({}); }
+              } catch(e) {}
+            }
           }
         };
-        ws.onerror = (e) => { console.error('[Z2M Panel] WS error en _getZ2MDevices:', e); clearTimeout(t); ok({}); };
+        ws.onerror = () => done();
       });
-    } catch(e) { return {}; }
+    } catch(e) { return empty; }
   }
 
   async _load() {
     this._$('dev-container').innerHTML = '<div class="loading"><div class="spinner"></div><span>Cargando…</span></div>';
     try {
-      const [statesR, wsDevs, wsEnts, z2mModelMap] = await Promise.all([
+      const [statesR, wsDevs, wsEnts, z2mData] = await Promise.all([
         fetch(`${this._haUrl}/api/states`, { headers: this._hdrs }).then(r => r.json()),
         this._wsCall('config/device_registry/list'),
         this._wsCall('config/entity_registry/list'),
@@ -930,28 +993,32 @@ class Z2MPanel extends HTMLElement {
 
       this._devices = z2m.map(d => {
         const ents    = allEnts.filter(e => e.device_id === d.id);
-        // Buscar entidad linkquality — solo entidades NO deshabilitadas
-      const lqE = ents.find(e =>
-        e.entity_id.includes('linkquality') &&
-        !e.disabled_by && !e.hidden_by
-      );
         const bE      = ents.find(e => /(battery|batt)$/.test(e.entity_id) && !e.entity_id.includes('low'));
-        const lqState = lqE ? sm[lqE.entity_id] : null;
-      const lq      = lqState && lqState.state !== 'unavailable' ? parseInt(lqState.state) : null;
-        const b       = bE  ? parseInt(sm[bE.entity_id]?.state)  : null;
+        const b       = bE ? parseInt(sm[bE.entity_id]?.state) : null;
         const ieee    = d.identifiers?.find(i => i[0] === 'mqtt')?.[1] || d.name;
-        // Usar el model ID real de Z2M si está disponible, sino el de HA
-        const realModel = z2mModelMap[ieee] || null;
-        // modelId obtenido de bridge/devices (puede ser null si Z2M no respondió)
-        // last_seen: la fecha más reciente entre todas las entidades activas
-        let lastSeen = null;
-        ents.forEach(e => {
-          if (e.disabled_by) return;
-          const s = sm[e.entity_id];
-          if (!s) return;
-          const t = new Date(s.last_changed);
-          if (!lastSeen || t > lastSeen) lastSeen = t;
-        });
+
+        // Modelo real de Z2M (bridge/devices), fallback al de HA
+        const realModel = z2mData.models[ieee] || null;
+
+        // Linkquality: primero desde MQTT retenido, luego desde entidad HA
+        let lq = z2mData.lq[ieee] !== undefined ? z2mData.lq[ieee] : null;
+        if (lq === null) {
+          const lqE = ents.find(e => e.entity_id.includes('linkquality'));
+          const lqState = lqE ? sm[lqE.entity_id] : null;
+          lq = lqState && lqState.state !== 'unavailable' ? parseInt(lqState.state) : null;
+        }
+
+        // last_seen: preferir el de Z2M (no se resetea con HA), fallback a HA last_changed
+        let lastSeen = z2mData.lastSeen[ieee] || null;
+        if (!lastSeen) {
+          ents.forEach(e => {
+            if (e.disabled_by) return;
+            const s = sm[e.entity_id];
+            if (!s) return;
+            const t = new Date(s.last_changed);
+            if (!lastSeen || t > lastSeen) lastSeen = t;
+          });
+        }
 
         const dev = {
           id: d.id, name: d.name_by_user || d.name, ieee,
@@ -1078,7 +1145,7 @@ class Z2MPanel extends HTMLElement {
 
     card.querySelector('.dev-head').insertBefore(thumbDiv, card.querySelector('.dev-info'));
     card.querySelector('.act-btn').addEventListener('click', (e) => { e.stopPropagation(); this._openRename(d.name); });
-    card.querySelector('.act-btn.del').addEventListener('click', (e) => { e.stopPropagation(); this._openDelete(d.name); });
+    card.querySelector('.act-btn.del').addEventListener('click', (e) => { e.stopPropagation(); this._openDelete(d); });
     // Click en la tarjeta abre el popup de entidades
     card.addEventListener('click', () => this._openEntPopup(d));
     return card;
@@ -1135,7 +1202,10 @@ class Z2MPanel extends HTMLElement {
 
   _showPairBanner(secs) {
     this._$('permit-bar').classList.add('on');
-    this._$('btn-pair').disabled = true;
+    this._$('pair-ripple').classList.add('on');
+    const pb = this._$('btn-pair');
+    pb.textContent = '⏹ Detener';
+    pb.disabled = false;
     let rem = secs;
     clearInterval(this._pairTimer);
     this._$('permit-cd').textContent = rem + 's';
@@ -1148,7 +1218,10 @@ class Z2MPanel extends HTMLElement {
 
   _hidePairBanner() {
     this._$('permit-bar').classList.remove('on');
-    this._$('btn-pair').disabled = false;
+    this._$('pair-ripple').classList.remove('on');
+    const pb = this._$('btn-pair');
+    pb.textContent = '📡 Buscar';
+    pb.disabled = false;
     clearInterval(this._pairTimer);
     this._pairTimer = null;
   }
@@ -1197,18 +1270,26 @@ class Z2MPanel extends HTMLElement {
   }
 
   // ── DELETE ────────────────────────────────────────────────────
-  _openDelete(name) {
-    this._deleteName = name;
-    this._$('m-delete-sub').textContent = `¿Seguro que quieres eliminar "${name}"? Tendrás que volver a emparejarlo.`;
+  _openDelete(device) {
+    // Acepta tanto el objeto dispositivo como un nombre string (compatibilidad)
+    if (typeof device === 'string') device = { name: device, ieee: device };
+    this._deleteDevice = device;
+    this._deleteName = device.name; // compatibilidad
+    this._$('m-delete-sub').textContent = `¿Seguro que quieres eliminar "${device.name}"? Tendrás que volver a emparejarlo.`;
     this._$('m-delete').classList.add('on');
   }
 
   async _doDelete() {
-    if (!this._deleteName) return;
+    const dev = this._deleteDevice;
+    if (!dev) return;
     this._closeModal('m-delete');
+    // Usar ieee_address si está disponible (más fiable que el nombre amigable)
+    const isIeee = dev.ieee && /^0x[0-9a-f]{16}$/i.test(dev.ieee);
+    const id = isIeee ? dev.ieee : dev.name;
     try {
-      await this._mqttPub('zigbee2mqtt/bridge/request/device/remove', { id: this._deleteName });
-      this._toast('ok', `🗑️ "${this._deleteName}" eliminado`);
+      await this._mqttPub('zigbee2mqtt/bridge/request/device/remove', { id, force: true });
+      this._toast('ok', `🗑️ "${dev.name}" eliminado`);
+      this._deleteDevice = null;
       setTimeout(() => this._load(), 1800);
     } catch { this._toast('err', 'Error al eliminar'); }
   }
@@ -1238,16 +1319,30 @@ class Z2MPanel extends HTMLElement {
         if (topic === 'zigbee2mqtt/bridge/events') {
           try {
             const payload = JSON.parse(m.event.payload);
-            // device_joined: llega cuando un dispositivo se une
-            // device_interview_successful: cuando Z2M lo identifica
-            if (payload.type === 'device_joined' || payload.type === 'device_interview_successful') {
-              const d = payload.data;
-              const ieee = d.ieee_address || '';
+            const d = payload.data || {};
+            const ieee = d.ieee_address || '';
+
+            if (payload.type === 'device_joined') {
+              // Fase 1: detectado, aún sin identificar
+              this._showJoiningToast(`📡 ${ieee} — identificando…`);
+              // Recargar para que aparezca en la sección "Sin nombre"
+              setTimeout(() => this._load(), 1200);
+
+            } else if (payload.type === 'device_interview_started') {
+              this._showJoiningToast(`🔍 Entrevistando dispositivo ${ieee}…`);
+
+            } else if (payload.type === 'device_interview_successful') {
+              // Fase final: identificado correctamente
+              this._hideJoiningToast();
               const model = d.supported ? (d.definition?.model || null) : null;
               const vendor = d.definition?.vendor || d.manufacturer || '';
               const desc = d.definition?.description || d.model_id || 'Dispositivo desconocido';
               this._showNewDeviceAlert(ieee, model, vendor, desc);
-              // Recargar la lista después de un momento para que aparezca en la sección
+              setTimeout(() => this._load(), 1500);
+
+            } else if (payload.type === 'device_interview_failed') {
+              this._hideJoiningToast();
+              this._toast('err', `❌ Error identificando ${ieee}`);
               setTimeout(() => this._load(), 1500);
             }
           } catch(e) {}
@@ -1261,6 +1356,18 @@ class Z2MPanel extends HTMLElement {
         setTimeout(() => { if (this._loaded) this._startEventListener(); }, 5000);
       }
     };
+  }
+
+  _showJoiningToast(msg) {
+    const el = this._$('joining-toast');
+    if (!el) return;
+    this._$('joining-txt').textContent = msg;
+    el.classList.add('on');
+  }
+
+  _hideJoiningToast() {
+    const el = this._$('joining-toast');
+    if (el) el.classList.remove('on');
   }
 
   _showNewDeviceAlert(ieee, modelId, vendor, desc) {
@@ -1369,7 +1476,7 @@ class Z2MPanel extends HTMLElement {
     thumb.appendChild(this._thumbEl(d.model, d.modelId));
 
     renBtn.onclick = (e) => { e.stopPropagation(); popup.style.display='none'; this._openRename(d.name); };
-    delBtn.onclick = (e) => { e.stopPropagation(); popup.style.display='none'; this._openDelete(d.name); };
+    delBtn.onclick = (e) => { e.stopPropagation(); popup.style.display='none'; this._openDelete(d); };
 
     list.innerHTML = '<div class="loading" style="min-height:100px"><div class="spinner"></div></div>';
     popup.style.display = 'flex';
@@ -1404,9 +1511,6 @@ class Z2MPanel extends HTMLElement {
       if (!byDomain[dom]) byDomain[dom] = [];
       byDomain[dom].push(e);
     });
-
-    // Dominios interactivos
-    const interactive = new Set(['switch','light','cover','lock','button','select','number','text','input_boolean']);
 
     Object.entries(byDomain).forEach(([domain, ents]) => {
       const secTitle = document.createElement('div');
@@ -1532,6 +1636,57 @@ class Z2MPanel extends HTMLElement {
         list.appendChild(row);
       });
     });
+
+    // ── Opción convertir switch ↔ luz ──────────────────────────
+    if (d.type === 'switch' || d.type === 'light') {
+      const targetType  = d.type === 'switch' ? 'light' : 'switch';
+      const targetLabel = targetType === 'light' ? 'Luz 💡' : 'Interruptor 🔌';
+      const currentLabel = d.type === 'light' ? 'Luz 💡' : 'Interruptor 🔌';
+
+      const cfgTitle = document.createElement('div');
+      cfgTitle.className = 'ent-section-title';
+      cfgTitle.textContent = 'CONFIGURACIÓN';
+      list.appendChild(cfgTitle);
+
+      const cfgRow = document.createElement('div');
+      cfgRow.className = 'ent-row';
+
+      const cfgIcon = document.createElement('div');
+      cfgIcon.className = 'ent-row-icon';
+      cfgIcon.textContent = '⚙️';
+
+      const cfgBody = document.createElement('div');
+      cfgBody.className = 'ent-row-body';
+      cfgBody.innerHTML = `
+        <div class="ent-row-name">Tipo de dispositivo</div>
+        <div class="ent-row-id">Ahora: ${currentLabel}</div>`;
+
+      const cfgCtrl = document.createElement('div');
+      cfgCtrl.className = 'ent-row-ctrl';
+      const cvtBtn = document.createElement('button');
+      cvtBtn.className = 'ent-action-btn';
+      cvtBtn.textContent = `→ ${targetLabel}`;
+      cvtBtn.onclick = async () => {
+        cvtBtn.disabled = true;
+        cvtBtn.textContent = '…';
+        try {
+          const id = d.ieee && /^0x[0-9a-f]{16}$/i.test(d.ieee) ? d.ieee : d.name;
+          await this._mqttPub('zigbee2mqtt/bridge/request/device/options', { id, options: { type: targetType } });
+          this._toast('ok', `✅ Convertido a ${targetLabel} — recargando…`);
+          popup.style.display = 'none';
+          setTimeout(() => this._load(), 2500);
+        } catch {
+          this._toast('err', 'Error al convertir tipo');
+          cvtBtn.disabled = false;
+          cvtBtn.textContent = `→ ${targetLabel}`;
+        }
+      };
+      cfgCtrl.appendChild(cvtBtn);
+      cfgRow.appendChild(cfgIcon);
+      cfgRow.appendChild(cfgBody);
+      cfgRow.appendChild(cfgCtrl);
+      list.appendChild(cfgRow);
+    }
 
     // Suscribir a cambios de estado en tiempo real via WS
     this._subscribePopupStates(activeEnts.map(e => e.entity_id));

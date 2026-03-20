@@ -1,5 +1,5 @@
 // Z2M Panel — panel_custom Web Component
-// v2.7.0
+// v2.7.1
 // Copiar a /config/www/z2m-panel.js
 // Registrar en configuration.yaml como panel_custom
 
@@ -28,7 +28,7 @@ function ageClass(date) {
 // Bridge ID se detecta automáticamente buscando el dispositivo Z2M Bridge
 // No hay que hardcodearlo — funciona en cualquier instancia de HA
 let BRIDGE_ID = null;
-const VER = 'v2.7.0';
+const VER = 'v2.7.1';
 
 // Cache busting: detecta si hay una versión más nueva del archivo en disco
 // (ocurre tras una actualización de HACS) y fuerza una recarga sin caché.
@@ -772,7 +772,6 @@ class Z2MPanel extends HTMLElement {
       if (this._pairActive) this._stopPair();
       else this._startPair();
     });
-    this._$('btn-stop').addEventListener('click', () => this._stopPair());
     this._$('q').addEventListener('input', () => this._applyFilters());
 
     // Pills
@@ -1891,4 +1890,6 @@ class Z2MPanel extends HTMLElement {
   }
 }
 
-customElements.define('z2m-panel', Z2MPanel);
+if (!customElements.get('z2m-panel')) {
+  customElements.define('z2m-panel', Z2MPanel);
+}

@@ -37,7 +37,7 @@ Panel de gestión de Zigbee2MQTT para Home Assistant, instalable como `panel_cus
 ### Opción A — HACS (recomendado)
 
 1. HACS → Frontend → ⋮ → **Repositorios personalizados**
-2. URL: `https://github.com/Rybun/z2m-panel` — Categoría: **Dashboard**
+2. URL: `https://github.com/TU_USUARIO/z2m-panel` — Categoría: **Dashboard**
 3. Instala **Z2M Panel** desde HACS
 4. Añade a `configuration.yaml`:
 
@@ -47,7 +47,7 @@ panel_custom:
     sidebar_title: Zigbee2MQTT
     sidebar_icon: mdi:zigbee
     url_path: zigbee2mqtt
-    js_url: /local/z2m-panel.js
+    js_url: /local/community/z2m-panel/z2m-panel.js
 ```
 
 5. Reinicia Home Assistant

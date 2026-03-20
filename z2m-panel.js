@@ -1,5 +1,5 @@
 // Z2M Panel — panel_custom Web Component
-// v2.17.0
+// v2.18.0
 // Copiar a /config/www/z2m-panel.js
 // Registrar en configuration.yaml como panel_custom
 
@@ -28,7 +28,7 @@ function ageClass(date) {
 // Bridge ID se detecta automáticamente buscando el dispositivo Z2M Bridge
 // No hay que hardcodearlo — funciona en cualquier instancia de HA
 let BRIDGE_ID = null;
-const VER = 'v2.17.0';
+const VER = 'v2.18.0';
 
 // Cache busting: detecta si hay una versión más nueva del archivo en disco
 // (ocurre tras una actualización de HACS) y fuerza una recarga sin caché.
@@ -772,6 +772,12 @@ class Z2MPanel extends HTMLElement {
     if (!this._loaded) {
       this._loaded = true;
       this._render();
+      // Restaurar estado del botón antes de que _load() resuelva — evita el flash
+      if (sessionStorage.getItem('z2m-pairing') === '1') {
+        const pb = this._$('btn-pair');
+        pb.textContent = '⏹ Detener';
+        pb.classList.add('pairing');
+      }
       this._initTheme();
       this._bindEvents();
       this._load();
@@ -1161,6 +1167,14 @@ class Z2MPanel extends HTMLElement {
             this._showPairBanner(realRem);
           }
         }
+      } else if (sessionStorage.getItem('z2m-pairing') === '1') {
+        // El escaneo terminó entre recargas — limpiar estado residual
+        sessionStorage.removeItem('z2m-pairing');
+        if (!this._pairActive) {
+          const pb = this._$('btn-pair');
+          pb.textContent = '📡 Buscar';
+          pb.classList.remove('pairing');
+        }
       }
 
       this._renderAll();
@@ -1395,6 +1409,7 @@ class Z2MPanel extends HTMLElement {
     this._pairActive = true;
     // Solo tocar el DOM de UI en la primera activación para evitar parpadeos
     if (firstActivation) {
+      sessionStorage.setItem('z2m-pairing', '1');
       // Capturar snapshot de dispositivos sin nombre ya existentes ANTES de buscar
       this._prePairUnnamed = new Set(this._devices.filter(d => this._isIEEE(d.name)).map(d => d.id));
       this._$('permit-bar').classList.remove('leaving');
@@ -1425,6 +1440,7 @@ class Z2MPanel extends HTMLElement {
   _hidePairBanner() {
     this._pairActive = false;
     this._prePairUnnamed = new Set();
+    sessionStorage.removeItem('z2m-pairing');
     const bar = this._$('permit-bar');
     if (bar) {
       bar.classList.add('leaving');

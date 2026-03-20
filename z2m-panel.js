@@ -1,5 +1,5 @@
 // Z2M Panel — panel_custom Web Component
-// v2.21.0
+// v2.22.0
 // Copiar a /config/www/z2m-panel.js
 // Registrar en configuration.yaml como panel_custom
 
@@ -28,7 +28,7 @@ function ageClass(date) {
 // Bridge ID se detecta automáticamente buscando el dispositivo Z2M Bridge
 // No hay que hardcodearlo — funciona en cualquier instancia de HA
 let BRIDGE_ID = null;
-const VER = 'v2.21.0';
+const VER = 'v2.22.0';
 
 // Cache busting: detecta si hay una versión más nueva del archivo en disco
 // (ocurre tras una actualización de HACS) y fuerza una recarga sin caché.
@@ -231,6 +231,7 @@ main{padding:18px 14px;max-width:1200px;margin:0 auto}
 .pill.on{background:var(--tint);color:#fff}
 .toolbar-foot{display:flex;align-items:center;justify-content:space-between;padding:0 2px;margin-bottom:12px}
 .stats{font-size:.72rem;color:var(--text3)}
+#dev-container{contain:layout;}
 .dev-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}
 .dev-card{background:var(--bg2);border-radius:var(--rc);padding:14px;
   transition:transform .15s,box-shadow .15s;box-shadow:var(--shadow);animation:fadeUp .25s ease both;cursor:pointer}
@@ -1277,25 +1278,24 @@ class Z2MPanel extends HTMLElement {
     }
 
     let grid = this.shadowRoot.getElementById('dev-grid');
-    if (!grid) {
-      // Primera carga: construir el grid desde cero
+    const firstRender = !grid;
+
+    if (firstRender) {
+      // Primera carga: construir el grid FUERA del DOM para evitar reflows escalonados
       grid = document.createElement('div');
       grid.className = 'dev-grid';
       grid.id = 'dev-grid';
-      container.innerHTML = '';
-      container.appendChild(grid);
+    } else {
+      // Cargas posteriores: eliminar tarjetas que ya no existen
+      const currentIds = new Set(named.map(d => d.id));
+      grid.querySelectorAll('.dev-card').forEach(card => {
+        const id = card.id.replace('dc-', '');
+        if (!currentIds.has(id)) {
+          card.classList.add('card-removing');
+          setTimeout(() => card.remove(), 260);
+        }
+      });
     }
-
-    const currentIds = new Set(named.map(d => d.id));
-
-    // Eliminar tarjetas de dispositivos que ya no existen
-    grid.querySelectorAll('.dev-card').forEach(card => {
-      const id = card.id.replace('dc-', '');
-      if (!currentIds.has(id)) {
-        card.classList.add('card-removing');
-        setTimeout(() => card.remove(), 260);
-      }
-    });
 
     // Actualizar existentes o crear nuevas
     named.forEach((d, i) => {
@@ -1308,6 +1308,9 @@ class Z2MPanel extends HTMLElement {
         grid.appendChild(newCard);
       }
     });
+
+    // Primera carga: un único replaceChildren atómico (sin spinner→vacío→grid)
+    if (firstRender) container.replaceChildren(grid);
 
     this._applyFilters();
   }

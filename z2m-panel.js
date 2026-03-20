@@ -1,5 +1,5 @@
 // Z2M Panel — panel_custom Web Component
-// v2.11.0
+// v2.12.0
 // Copiar a /config/www/z2m-panel.js
 // Registrar en configuration.yaml como panel_custom
 
@@ -28,7 +28,7 @@ function ageClass(date) {
 // Bridge ID se detecta automáticamente buscando el dispositivo Z2M Bridge
 // No hay que hardcodearlo — funciona en cualquier instancia de HA
 let BRIDGE_ID = null;
-const VER = 'v2.11.0';
+const VER = 'v2.12.0';
 
 // Cache busting: detecta si hay una versión más nueva del archivo en disco
 // (ocurre tras una actualización de HACS) y fuerza una recarga sin caché.
@@ -173,7 +173,7 @@ const CSS = `
 @keyframes pillOut{from{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}to{opacity:0;transform:translateX(-50%) translateY(14px) scale(.88)}}
 #permit-bar.leaving{display:flex;animation:pillOut .32s cubic-bezier(.4,0,.2,1) forwards;}
 .permit-icon{font-size:1.3rem;line-height:1;flex-shrink:0;}
-.permit-content{display:flex;flex-direction:column;gap:2px;}
+.permit-content{display:flex;flex-direction:column;gap:2px;align-items:center;}
 .permit-title{font-size:.82rem;font-weight:700;color:var(--tint);line-height:1.1;}
 :host([theme="light"]) .permit-title{color:#004db3;}
 .permit-sub{font-size:.67rem;font-weight:400;color:rgba(10,132,255,.7);line-height:1.2;}
@@ -753,6 +753,7 @@ class Z2MPanel extends HTMLElement {
     this._popupWs = null;  // WebSocket para estados en tiempo real del popup
     this._mqttStateWs = null;  // WebSocket persistente para LQ/last_seen en tiempo real
     this._bridgeRestartTime = null;  // Tiempo del último reinicio de HA (para filtrar last_seen)
+    this._prePairUnnamed = new Set();  // IDs sin nombre existentes ANTES de empezar a buscar
   }
 
   set hass(hass) {
@@ -1213,7 +1214,11 @@ class Z2MPanel extends HTMLElement {
       card.querySelector('.btn-assign').addEventListener('click', () => this._openAssign(d.name));
       grid.appendChild(card);
     });
-    if (newCardAdded && this._pairActive) this._spawnConfetti();
+    // Confetti solo si apareció un dispositivo que NO existía antes de empezar a buscar
+    if (newCardAdded && this._pairActive) {
+      const trulyNew = nd.some(d => !existing.has(`nc-${d.id}`) && !this._prePairUnnamed.has(d.id));
+      if (trulyNew) this._spawnConfetti();
+    }
   }
 
   // Grid principal — actualización suave: patch en los existentes, añade los nuevos, elimina los borrados
@@ -1379,6 +1384,8 @@ class Z2MPanel extends HTMLElement {
     this._pairActive = true;
     // Solo tocar el DOM de UI en la primera activación para evitar parpadeos
     if (firstActivation) {
+      // Capturar qué dispositivos sin nombre ya existían ANTES de empezar a buscar
+      this._prePairUnnamed = new Set(this._devices.filter(d => this._isIEEE(d.name)).map(d => d.id));
       this._$('permit-bar').classList.remove('leaving');
       this._$('permit-bar').classList.add('on');
       this._$('pair-ripple').classList.add('on');

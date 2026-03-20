@@ -1,5 +1,5 @@
 // Z2M Panel — panel_custom Web Component
-// v2.15.0
+// v2.16.0
 // Copiar a /config/www/z2m-panel.js
 // Registrar en configuration.yaml como panel_custom
 
@@ -28,7 +28,7 @@ function ageClass(date) {
 // Bridge ID se detecta automáticamente buscando el dispositivo Z2M Bridge
 // No hay que hardcodearlo — funciona en cualquier instancia de HA
 let BRIDGE_ID = null;
-const VER = 'v2.15.0';
+const VER = 'v2.16.0';
 
 // Cache busting: detecta si hay una versión más nueva del archivo en disco
 // (ocurre tras una actualización de HACS) y fuerza una recarga sin caché.
@@ -257,7 +257,7 @@ main{padding:18px 14px;max-width:1200px;margin:0 auto}
 .dev-lastseen.age-ok   {color:var(--text3)}
 .dev-lastseen.age-warn {color:var(--yellow)}
 .dev-lastseen.age-old  {color:var(--red)}
-.dev-lastseen.age-unknown{color:var(--text3);opacity:.4}
+.dev-lastseen.age-unknown{color:var(--red)}
 .lq-bar{width:3px;background:var(--bg4);border-radius:2px}
 .lq-bar.on{background:var(--green)}.lq-bar.on.med{background:var(--yellow)}.lq-bar.on.bad{background:var(--red)}
 .lq-val{font-size:.6rem;color:var(--text3);font-variant-numeric:tabular-nums}
@@ -311,10 +311,10 @@ main{padding:18px 14px;max-width:1200px;margin:0 auto}
 .empty{text-align:center;padding:60px 20px;color:var(--text3)}
 .empty .ico{font-size:3rem;margin-bottom:10px;opacity:.2}
 .empty p{font-size:.84rem}
-.toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);
+.toast{position:fixed;top:62px;left:50%;transform:translateX(-50%);
   background:var(--bg3);color:var(--text);border-radius:var(--rp);
   padding:10px 20px;font-size:.84rem;font-weight:500;z-index:9999;
-  animation:fadeUp .25s ease;white-space:nowrap;box-shadow:0 4px 20px rgba(0,0,0,.35)}
+  animation:fadeDown .25s ease;white-space:nowrap;box-shadow:0 4px 20px rgba(0,0,0,.35)}
 .toast.ok{background:var(--green);color:#fff}
 .toast.err{background:var(--red);color:#fff}
 /* ── POPUP DE ENTIDADES ── */
@@ -413,6 +413,7 @@ main{padding:18px 14px;max-width:1200px;margin:0 auto}
 
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeDown{from{opacity:0;transform:translateX(-50%) translateY(-8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
 @keyframes slideSheet{from{transform:translateY(100%)}to{transform:translateY(0)}}
 
 /* ── NUEVO DISPOSITIVO DETECTADO ── */
@@ -1294,7 +1295,7 @@ class Z2MPanel extends HTMLElement {
       : '';
     const lastSeenHtml = d.lastSeen
       ? `<div class="dev-lastseen ${ageClass(d.lastSeen)}">🕐 ${timeAgo(d.lastSeen)}</div>`
-      : '';
+      : `<div class="dev-lastseen age-unknown">⚠️ última conexión desconocida</div>`;
     return battHtml + lastSeenHtml;
   }
 

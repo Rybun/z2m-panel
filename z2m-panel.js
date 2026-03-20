@@ -1,5 +1,5 @@
 // Z2M Panel — panel_custom Web Component
-// v2.9.0
+// v2.10.0
 // Copiar a /config/www/z2m-panel.js
 // Registrar en configuration.yaml como panel_custom
 
@@ -28,7 +28,7 @@ function ageClass(date) {
 // Bridge ID se detecta automáticamente buscando el dispositivo Z2M Bridge
 // No hay que hardcodearlo — funciona en cualquier instancia de HA
 let BRIDGE_ID = null;
-const VER = 'v2.9.0';
+const VER = 'v2.10.0';
 
 // Cache busting: detecta si hay una versión más nueva del archivo en disco
 // (ocurre tras una actualización de HACS) y fuerza una recarga sin caché.
@@ -551,7 +551,7 @@ main{padding:18px 14px;max-width:1200px;margin:0 auto}
 .pr-ring{
   position:absolute;
   top:calc(100% - 42px);left:50%;
-  width:240vmax;height:240vmax;
+  width:340vmax;height:340vmax;
   border-radius:50%;
   border:3px solid rgba(10,132,255,.85);
   transform:translate(-50%,-50%) scale(0);
@@ -957,7 +957,7 @@ class Z2MPanel extends HTMLElement {
   // IMPORTANTE: los mensajes retenidos (zigbee2mqtt/+) llegan ANTES que bridge/devices,
   // por eso se almacenan en pendingStates y se procesan cuando llega bridge/devices.
   async _getZ2MDevices() {
-    const empty = { models: {}, lastSeen: {}, lq: {} };
+    const empty = { models: {}, lastSeen: {}, lq: {}, friendlyToIeee: {} };
     try {
       const wsUrl = this._haUrl.replace(/^http/, 'ws') + '/api/websocket';
       return await new Promise(ok => {
@@ -972,7 +972,7 @@ class Z2MPanel extends HTMLElement {
         const done = () => {
           if (resolveTimer) clearTimeout(resolveTimer);
           try { ws.close(); } catch(e) {}
-          ok({ models, lastSeen, lq: lqMap });
+          ok({ models, lastSeen, lq: lqMap, friendlyToIeee });
         };
 
         const applyState = (friendlyName, state) => {
@@ -1032,7 +1032,7 @@ class Z2MPanel extends HTMLElement {
                 });
                 // Esperar un poco más para mensajes retenidos que aún puedan llegar
                 clearTimeout(globalTimeout);
-                resolveTimer = setTimeout(done, 800);
+                resolveTimer = setTimeout(done, 1500);
               } catch(e) { done(); }
 
             } else if (topic.startsWith('zigbee2mqtt/') && !topic.startsWith('zigbee2mqtt/bridge')) {
@@ -1126,8 +1126,6 @@ class Z2MPanel extends HTMLElement {
             const s = sm[e.entity_id];
             if (!s) return;
             const t = new Date(s.last_changed);
-            // Ignorar timestamps que coinciden con el reinicio de HA (son artefactos, no actividad real)
-            if (this._isRestartTime(t)) return;
             if (!lastSeen || t > lastSeen) lastSeen = t;
           });
         }
@@ -1144,6 +1142,11 @@ class Z2MPanel extends HTMLElement {
         dev.type = this._guessType(dev);
         return dev;
       });
+
+      // Guardar mapa friendly_name→ieee y ieee→device para el listener MQTT en tiempo real
+      this._friendlyToIeee = z2mData.friendlyToIeee || {};
+      this._devsByIeee = {};
+      this._devices.forEach(d => { this._devsByIeee[d.ieee] = d; });
 
       this._renderAll();
     } catch(e) {
@@ -1716,7 +1719,10 @@ class Z2MPanel extends HTMLElement {
       byDomain[dom].push(e);
     });
 
-    Object.entries(byDomain).forEach(([domain, ents]) => {
+    const _domOrder = ['light','switch','cover','climate','binary_sensor','sensor','select','number','button'];
+    Object.entries(byDomain)
+      .sort(([a],[b]) => { const ai=_domOrder.indexOf(a),bi=_domOrder.indexOf(b); return (ai<0?99:ai)-(bi<0?99:bi); })
+      .forEach(([domain, ents]) => {
       const secTitle = document.createElement('div');
       secTitle.className = 'ent-section-title';
       secTitle.textContent = domain;
@@ -1981,7 +1987,10 @@ class Z2MPanel extends HTMLElement {
         const friendlyName = topic.slice('zigbee2mqtt/'.length);
         try {
           const state = JSON.parse(m.event.payload);
-          const dev = this._devices.find(d => d.name === friendlyName);
+          // Usar el mapa friendly→ieee→device para una coincidencia fiable
+          const ieee = this._friendlyToIeee?.[friendlyName];
+          const dev = ieee ? this._devsByIeee?.[ieee]
+                           : this._devices.find(d => d.name === friendlyName);
           if (!dev) return;
           let changed = false;
           if (typeof state.linkquality === 'number') {

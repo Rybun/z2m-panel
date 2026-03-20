@@ -1,5 +1,5 @@
 // Z2M Panel — panel_custom Web Component
-// v2.14.0
+// v2.15.0
 // Copiar a /config/www/z2m-panel.js
 // Registrar en configuration.yaml como panel_custom
 
@@ -28,7 +28,7 @@ function ageClass(date) {
 // Bridge ID se detecta automáticamente buscando el dispositivo Z2M Bridge
 // No hay que hardcodearlo — funciona en cualquier instancia de HA
 let BRIDGE_ID = null;
-const VER = 'v2.14.0';
+const VER = 'v2.15.0';
 
 // Cache busting: detecta si hay una versión más nueva del archivo en disco
 // (ocurre tras una actualización de HACS) y fuerza una recarga sin caché.
@@ -566,7 +566,7 @@ main{padding:18px 14px;max-width:1200px;margin:0 auto}
   animation-play-state:paused;
   will-change:transform,opacity;
 }
-#pair-ripple.on .pr-ring{animation-play-state:running;}
+#pair-ripple.on .pr-ring,#pair-ripple.hiding .pr-ring{animation-play-state:running;}
 .pr-ring:nth-child(1){animation-delay:0s;}
 .pr-ring:nth-child(2){animation-delay:1.67s;border-color:rgba(10,132,255,.38);}
 .pr-ring:nth-child(3){animation-delay:3.33s;border-color:rgba(10,132,255,.22);}
@@ -1093,22 +1093,6 @@ class Z2MPanel extends HTMLElement {
       if (conn?.last_changed) this._bridgeRestartTime = new Date(conn.last_changed);
 
       this._updateBridge(conn?.state === 'on');
-      if (perm?.state === 'on') {
-        const rem = parseInt(ptim?.state);
-        const realRem = Number.isFinite(rem) && rem > 0 ? rem : null;
-        if (!this._pairActive) {
-          // Primera vez: arrancar con el valor real o 60 si no hay dato
-          this._showPairBanner(realRem ?? 60);
-        } else if (realRem !== null) {
-          // Ya activo: sincronizar solo si el sensor da un valor válido Y difiere >8s
-          const cdEl = this._$('permit-cd');
-          const shown = cdEl ? parseInt(cdEl.textContent) : NaN;
-          if (!Number.isFinite(shown) || Math.abs(shown - realRem) > 8) {
-            this._showPairBanner(realRem);
-          }
-        }
-        // Si realRem es null y ya está activo: dejar el timer como está
-      }
 
       // Detectar bridge ID si no está disponible aún
       if (!BRIDGE_ID) await this._detectBridgeId();
@@ -1160,6 +1144,21 @@ class Z2MPanel extends HTMLElement {
       this._friendlyToIeee = z2mData.friendlyToIeee || {};
       this._devsByIeee = {};
       this._devices.forEach(d => { this._devsByIeee[d.ieee] = d; });
+
+      // Permit-join: ahora que _devices ya está actualizado, capturar snapshot correcto
+      if (perm?.state === 'on') {
+        const rem = parseInt(ptim?.state);
+        const realRem = Number.isFinite(rem) && rem > 0 ? rem : null;
+        if (!this._pairActive) {
+          this._showPairBanner(realRem ?? 60);
+        } else if (realRem !== null) {
+          const cdEl = this._$('permit-cd');
+          const shown = cdEl ? parseInt(cdEl.textContent) : NaN;
+          if (!Number.isFinite(shown) || Math.abs(shown - realRem) > 8) {
+            this._showPairBanner(realRem);
+          }
+        }
+      }
 
       this._renderAll();
     } catch(e) {
@@ -1396,12 +1395,14 @@ class Z2MPanel extends HTMLElement {
       this._prePairUnnamed = new Set(this._devices.filter(d => this._isIEEE(d.name)).map(d => d.id));
       this._$('permit-bar').classList.remove('leaving');
       this._$('permit-bar').classList.add('on');
-      // Reiniciar las animaciones de los anillos desde cero (escala 0)
-      const rings = this._$('pair-ripple').querySelectorAll('.pr-ring');
-      rings.forEach(r => { r.style.animationName = 'none'; });
-      void this._$('pair-ripple').offsetWidth; // forzar reflow para resetear animation
-      rings.forEach(r => { r.style.animationName = ''; });
-      this._$('pair-ripple').classList.add('on');
+      // Reiniciar las animaciones de los anillos desde cero, sin forzar reflow
+      const ripple = this._$('pair-ripple');
+      ripple.classList.remove('hiding');
+      ripple.querySelectorAll('.pr-ring').forEach(r => { r.style.animationName = 'none'; });
+      requestAnimationFrame(() => {
+        ripple.querySelectorAll('.pr-ring').forEach(r => { r.style.animationName = ''; });
+        ripple.classList.add('on');
+      });
       const pb = this._$('btn-pair');
       pb.textContent = '⏹ Detener';
       pb.classList.add('pairing');
@@ -1425,7 +1426,10 @@ class Z2MPanel extends HTMLElement {
       bar.classList.add('leaving');
       setTimeout(() => bar.classList.remove('on', 'leaving'), 350);
     }
-    this._$('pair-ripple').classList.remove('on');
+    const ripple = this._$('pair-ripple');
+    ripple.classList.remove('on');
+    ripple.classList.add('hiding');
+    setTimeout(() => ripple.classList.remove('hiding'), 460);
     const pb = this._$('btn-pair');
     pb.textContent = '📡 Buscar';
     pb.classList.remove('pairing');

@@ -1,12 +1,34 @@
 // Z2M Panel — panel_custom Web Component
-// v2.1.1
+// v2.4.0
 // Copiar a /config/www/z2m-panel.js
 // Registrar en configuration.yaml como panel_custom
+
+// Formatea una fecha como tiempo relativo: "hace 5 min", "hace 3 días", etc.
+function timeAgo(date) {
+  if (!date) return null;
+  const secs = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (secs < 60)       return 'hace un momento';
+  if (secs < 3600)     return `hace ${Math.floor(secs/60)} min`;
+  if (secs < 86400)    return `hace ${Math.floor(secs/3600)} h`;
+  if (secs < 86400*7)  return `hace ${Math.floor(secs/86400)} días`;
+  if (secs < 86400*30) return `hace ${Math.floor(secs/86400/7)} sem`;
+  return `hace ${Math.floor(secs/86400/30)} meses`;
+}
+
+// Clasifica la antigüedad para colorear
+function ageClass(date) {
+  if (!date) return 'age-unknown';
+  const days = (Date.now() - date.getTime()) / 86400000;
+  if (days < 1)   return 'age-fresh';
+  if (days < 7)   return 'age-ok';
+  if (days < 30)  return 'age-warn';
+  return 'age-old';
+}
 
 // Bridge ID se detecta automáticamente buscando el dispositivo Z2M Bridge
 // No hay que hardcodearlo — funciona en cualquier instancia de HA
 let BRIDGE_ID = null;
-const VER = 'v2.1.1';
+const VER = 'v2.4.0';
 
 // Cache busting: invalida la caché del navegador automáticamente
 // Añade ?v=VERSION a la URL del script en el configuration.yaml de forma efectiva
@@ -79,7 +101,7 @@ const CSS = `
 :host([theme="light"]) #navbar{background:rgba(242,242,247,.88)}
 .nav-left{display:flex;align-items:center;gap:6px}
 
-/* Botón atrás */
+/* Botón atrás — solo visible en móvil/tablet (sin sidebar de HA) */
 .back-btn{
   width:34px;height:34px;border-radius:50%;border:none;
   background:transparent;color:var(--tint);
@@ -89,6 +111,11 @@ const CSS = `
 }
 .back-btn:hover{background:var(--tint-bg);}
 .back-btn:active{transform:scale(.88);}
+
+/* HA muestra sidebar a partir de 870px — ocultar botón atrás en esos casos */
+@media(min-width:870px){
+  .back-btn{display:none;}
+}
 
 /* Título de cabecera */
 .nav-title-wrap{display:flex;flex-direction:column;gap:1px;}
@@ -199,6 +226,18 @@ main{padding:18px 14px;max-width:1200px;margin:0 auto}
 .dev-vendor{font-size:.65rem;color:var(--text3)}
 .dev-lq{display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0}
 .lq-bars{display:flex;align-items:flex-end;gap:2px;height:14px}
+
+/* Last seen */
+.dev-lastseen{
+  font-size:.62rem;color:var(--text3);
+  display:flex;align-items:center;gap:3px;
+  white-space:nowrap;
+}
+.dev-lastseen.age-fresh{color:var(--green)}
+.dev-lastseen.age-ok   {color:var(--text3)}
+.dev-lastseen.age-warn {color:var(--yellow)}
+.dev-lastseen.age-old  {color:var(--red)}
+.dev-lastseen.age-unknown{color:var(--text3);opacity:.4}
 .lq-bar{width:3px;background:var(--bg4);border-radius:2px}
 .lq-bar.on{background:var(--green)}.lq-bar.on.med{background:var(--yellow)}.lq-bar.on.bad{background:var(--red)}
 .lq-val{font-size:.6rem;color:var(--text3);font-variant-numeric:tabular-nums}
@@ -259,6 +298,47 @@ main{padding:18px 14px;max-width:1200px;margin:0 auto}
 .toast.ok{background:var(--green);color:#fff}
 .toast.err{background:var(--red);color:#fff}
 /* ── POPUP DE ENTIDADES ── */
+/* ── CONTROLES INTERACTIVOS DEL POPUP ── */
+.ent-row-ctrl{display:flex;align-items:center;justify-content:flex-end;flex-shrink:0;gap:6px}
+
+/* Toggle iOS */
+.ent-toggle{
+  width:48px;height:28px;border-radius:14px;border:none;
+  background:var(--bg4);cursor:pointer;position:relative;
+  display:flex;align-items:center;padding:2px;
+  transition:background .25s;flex-shrink:0;
+}
+.ent-toggle.on{background:var(--green)}
+.ent-toggle-knob{
+  width:24px;height:24px;border-radius:50%;background:#fff;
+  box-shadow:0 1px 4px rgba(0,0,0,.3);
+  transition:transform .25s cubic-bezier(.4,0,.2,1);
+}
+.ent-toggle.on .ent-toggle-knob{transform:translateX(20px)}
+.ent-toggle:disabled{opacity:.4;cursor:not-allowed}
+
+/* Botones de acción */
+.ent-action-btn{
+  padding:5px 10px;border-radius:8px;border:none;
+  background:var(--bg3);color:var(--text2);
+  font-family:inherit;font-size:.75rem;font-weight:600;
+  cursor:pointer;transition:all .15s;
+}
+.ent-action-btn:hover{background:var(--tint-bg);color:var(--tint)}
+.ent-action-btn:active{transform:scale(.93)}
+
+/* Select */
+.ent-select{
+  background:var(--bg3);border:none;border-radius:8px;
+  padding:5px 8px;color:var(--text);font-family:inherit;
+  font-size:.75rem;outline:none;cursor:pointer;max-width:130px;
+}
+
+/* Slider */
+.ent-slider{
+  width:80px;height:4px;accent-color:var(--tint);cursor:pointer;
+}
+
 @keyframes popIn{
   0%  {opacity:0;transform:translateY(12px) scale(.96);}
   70% {transform:translateY(-2px) scale(1.01);}
@@ -575,6 +655,7 @@ class Z2MPanel extends HTMLElement {
     this._loaded = false;
     this._alertTimer = null;
     this._eventWs = null;  // WebSocket para eventos en tiempo real de Z2M
+    this._popupWs = null;  // WebSocket para estados en tiempo real del popup
   }
 
   set hass(hass) {
@@ -850,9 +931,11 @@ class Z2MPanel extends HTMLElement {
 
       this._devices = z2m.map(d => {
         const ents    = allEnts.filter(e => e.device_id === d.id);
-        // Buscar entidad linkquality — puede tener prefijo 0x o nombre amigable
-      const lqE     = ents.find(e => e.entity_id.includes('linkquality')) ||
-                      ents.find(e => (e.original_name || '').toLowerCase().includes('linkquality'));
+        // Buscar entidad linkquality — solo entidades NO deshabilitadas
+      const lqE = ents.find(e =>
+        e.entity_id.includes('linkquality') &&
+        !e.disabled_by && !e.hidden_by
+      );
         const bE      = ents.find(e => /(battery|batt)$/.test(e.entity_id) && !e.entity_id.includes('low'));
         const lqState = lqE ? sm[lqE.entity_id] : null;
       const lq      = lqState && lqState.state !== 'unavailable' ? parseInt(lqState.state) : null;
@@ -861,13 +944,24 @@ class Z2MPanel extends HTMLElement {
         // Usar el model ID real de Z2M si está disponible, sino el de HA
         const realModel = z2mModelMap[ieee] || null;
         // modelId obtenido de bridge/devices (puede ser null si Z2M no respondió)
+        // last_seen: la fecha más reciente entre todas las entidades activas
+        let lastSeen = null;
+        ents.forEach(e => {
+          if (e.disabled_by) return;
+          const s = sm[e.entity_id];
+          if (!s) return;
+          const t = new Date(s.last_changed);
+          if (!lastSeen || t > lastSeen) lastSeen = t;
+        });
+
         const dev = {
           id: d.id, name: d.name_by_user || d.name, ieee,
-          model: d.model,        // nombre descriptivo de HA (para mostrar)
-          modelId: realModel,    // model ID real de Z2M (para imagen)
+          model: d.model,
+          modelId: realModel,
           vendor: d.manufacturer, area: d.area_id,
           lq: isNaN(lq) ? null : lq,
-          batt: isNaN(b) ? null : b, ents,
+          batt: isNaN(b) ? null : b,
+          lastSeen, ents,
         };
         dev.type = this._guessType(dev);
         return dev;
@@ -974,7 +1068,10 @@ class Z2MPanel extends HTMLElement {
           <button class="act-btn" title="Renombrar">✏️</button>
           <button class="act-btn del" title="Eliminar">🗑️</button>
         </div>
-        ${battHtml}
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px">
+          ${battHtml}
+          ${lastSeenHtml}
+        </div>
       </div>`;
 
     card.querySelector('.dev-head').insertBefore(thumbDiv, card.querySelector('.dev-info'));
@@ -1252,7 +1349,7 @@ class Z2MPanel extends HTMLElement {
     }
   }
 
-  // ── POPUP DE ENTIDADES ───────────────────────────────────────
+  // ── POPUP DE ENTIDADES INTERACTIVO ──────────────────────────
   async _openEntPopup(d) {
     const popup   = this._$('ent-popup');
     const thumb   = this._$('ent-thumb');
@@ -1262,73 +1359,239 @@ class Z2MPanel extends HTMLElement {
     const renBtn  = this._$('ent-rename-btn');
     const delBtn  = this._$('ent-delete-btn');
 
-    // Cabecera
     nameEl.textContent  = d.name;
-    modelEl.textContent = `${d.vendor || ''} ${d.model || ''}`.trim() || d.ieee;
+    const lsPopup = timeAgo(d.lastSeen);
+    modelEl.textContent = [`${d.vendor || ''} ${d.model || ''}`.trim() || d.ieee,
+      lsPopup ? `· ${lsPopup}` : ''].filter(Boolean).join(' ');
     thumb.innerHTML = '';
     thumb.appendChild(this._thumbEl(d.model, d.modelId));
 
     renBtn.onclick = (e) => { e.stopPropagation(); popup.style.display='none'; this._openRename(d.name); };
     delBtn.onclick = (e) => { e.stopPropagation(); popup.style.display='none'; this._openDelete(d.name); };
 
-    // Entidades — obtener estados actuales
-    list.innerHTML = '<div class="ent-section-title">Entidades</div>';
+    list.innerHTML = '<div class="loading" style="min-height:100px"><div class="spinner"></div></div>';
+    popup.style.display = 'flex';
 
+    // Obtener estados actuales
+    let stateMap = {};
+    try {
+      const resp = await fetch(`${this._haUrl}/api/states`, { headers: this._hdrs });
+      const all  = await resp.json();
+      all.forEach(s => { stateMap[s.entity_id] = s; });
+    } catch(e) {}
+
+    list.innerHTML = '';
     if (!d.ents || !d.ents.length) {
-      list.innerHTML += '<div style="padding:20px;text-align:center;color:var(--text3);font-size:.82rem">Sin entidades disponibles</div>';
-    } else {
-      // Obtener estados en paralelo
-      const entityIds = d.ents.map(e => e.entity_id);
-      let stateMap = {};
-      try {
-        const resp = await fetch(`${this._haUrl}/api/states`, { headers: this._hdrs });
-        const all  = await resp.json();
-        all.forEach(s => { stateMap[s.entity_id] = s; });
-      } catch(e) {}
-
-      const domainIcon = {
-        switch:'🔌', light:'💡', sensor:'📊', binary_sensor:'🔔',
-        select:'📋', number:'🔢', button:'🔘', cover:'🪟',
-        lock:'🔒', text:'📝', update:'⬆️', climate:'🌡️',
-      };
-
-      // Agrupar por dominio
-      const byDomain = {};
-      d.ents.forEach(e => {
-        const domain = e.entity_id.split('.')[0];
-        if (!byDomain[domain]) byDomain[domain] = [];
-        byDomain[domain].push(e);
-      });
-
-      Object.entries(byDomain).forEach(([domain, ents]) => {
-        const secTitle = document.createElement('div');
-        secTitle.className = 'ent-section-title';
-        secTitle.textContent = domain;
-        list.appendChild(secTitle);
-
-        ents.forEach(e => {
-          const state = stateMap[e.entity_id];
-          const stateVal = state ? state.state : '—';
-          const unit = state?.attributes?.unit_of_measurement || '';
-          const isOn  = stateVal === 'on';
-          const isOff = stateVal === 'off';
-          const displayVal = unit ? `${stateVal} ${unit}` : stateVal;
-
-          const row = document.createElement('div');
-          row.className = 'ent-row';
-          row.innerHTML = `
-            <div class="ent-row-icon">${domainIcon[domain] || '⚙️'}</div>
-            <div class="ent-row-body">
-              <div class="ent-row-name">${e.name || e.entity_id.split('.').pop()}</div>
-              <div class="ent-row-id">${e.entity_id}</div>
-            </div>
-            <div class="ent-row-state ${isOn?'on':isOff?'off':''}">${displayVal}</div>`;
-          list.appendChild(row);
-        });
-      });
+      list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text3);font-size:.82rem">Sin entidades</div>';
+      return;
     }
 
-    popup.style.display = 'flex';
+    const domainIcon = {
+      switch:'🔌', light:'💡', sensor:'📊', binary_sensor:'🔔',
+      select:'📋', number:'🔢', button:'🔘', cover:'🪟',
+      lock:'🔒', text:'📝', update:'⬆️', climate:'🌡️',
+    };
+
+    // Solo entidades no deshabilitadas
+    const activeEnts = d.ents.filter(e => !e.disabled_by);
+
+    // Agrupar por dominio
+    const byDomain = {};
+    activeEnts.forEach(e => {
+      const dom = e.entity_id.split('.')[0];
+      if (!byDomain[dom]) byDomain[dom] = [];
+      byDomain[dom].push(e);
+    });
+
+    // Dominios interactivos
+    const interactive = new Set(['switch','light','cover','lock','button','select','number','text','input_boolean']);
+
+    Object.entries(byDomain).forEach(([domain, ents]) => {
+      const secTitle = document.createElement('div');
+      secTitle.className = 'ent-section-title';
+      secTitle.textContent = domain;
+      list.appendChild(secTitle);
+
+      ents.forEach(e => {
+        const state    = stateMap[e.entity_id];
+        const stateVal = state ? state.state : '—';
+        const unit     = state?.attributes?.unit_of_measurement || '';
+        const attrs    = state?.attributes || {};
+        const isOn     = stateVal === 'on';
+        const isOff    = stateVal === 'off';
+        const isNA     = stateVal === 'unavailable' || stateVal === 'unknown';
+
+        const row = document.createElement('div');
+        row.className = 'ent-row';
+        row.id = `erow-${e.entity_id.replace(/\./g,'_')}`;
+
+        const icon = document.createElement('div');
+        icon.className = 'ent-row-icon';
+        icon.textContent = domainIcon[domain] || '⚙️';
+
+        const body = document.createElement('div');
+        body.className = 'ent-row-body';
+        body.innerHTML = `
+          <div class="ent-row-name">${e.name || e.entity_id.split('.').pop()}</div>
+          <div class="ent-row-id">${e.entity_id}</div>`;
+
+        const ctrl = document.createElement('div');
+        ctrl.className = 'ent-row-ctrl';
+        ctrl.id = `ctrl-${e.entity_id.replace(/\./g,'_')}`;
+
+        // Renderizar control según dominio
+        if (domain === 'switch' || domain === 'light' || domain === 'input_boolean') {
+          // Toggle iOS
+          const tog = document.createElement('button');
+          tog.className = `ent-toggle ${isOn ? 'on' : ''}`;
+          tog.disabled = isNA;
+          tog.innerHTML = '<div class="ent-toggle-knob"></div>';
+          tog.onclick = async () => {
+            const action = tog.classList.contains('on') ? 'turn_off' : 'turn_on';
+            tog.disabled = true;
+            try {
+              await fetch(`${this._haUrl}/api/services/${domain}/${action}`, {
+                method: 'POST', headers: this._hdrs,
+                body: JSON.stringify({ entity_id: e.entity_id })
+              });
+              tog.classList.toggle('on');
+            } catch(err) {}
+            setTimeout(() => { tog.disabled = false; }, 800);
+          };
+          ctrl.appendChild(tog);
+
+        } else if (domain === 'cover') {
+          // Botones subir/parar/bajar
+          const btns = document.createElement('div');
+          btns.style.cssText = 'display:flex;gap:5px';
+          [['▲','open_cover'],['■','stop_cover'],['▼','close_cover']].forEach(([lbl, svc]) => {
+            const b = document.createElement('button');
+            b.className = 'ent-action-btn';
+            b.textContent = lbl;
+            b.onclick = () => fetch(`${this._haUrl}/api/services/cover/${svc}`,
+              { method:'POST', headers:this._hdrs, body:JSON.stringify({entity_id:e.entity_id}) });
+            btns.appendChild(b);
+          });
+          ctrl.appendChild(btns);
+
+        } else if (domain === 'button') {
+          const b = document.createElement('button');
+          b.className = 'ent-action-btn';
+          b.textContent = 'Pulsar';
+          b.onclick = () => fetch(`${this._haUrl}/api/services/button/press`,
+            { method:'POST', headers:this._hdrs, body:JSON.stringify({entity_id:e.entity_id}) });
+          ctrl.appendChild(b);
+
+        } else if (domain === 'select' && attrs.options) {
+          const sel = document.createElement('select');
+          sel.className = 'ent-select';
+          attrs.options.forEach(opt => {
+            const o = document.createElement('option');
+            o.value = opt; o.textContent = opt;
+            if (opt === stateVal) o.selected = true;
+            sel.appendChild(o);
+          });
+          sel.onchange = () => fetch(`${this._haUrl}/api/services/select/select_option`,
+            { method:'POST', headers:this._hdrs,
+              body:JSON.stringify({entity_id:e.entity_id, option:sel.value}) });
+          ctrl.appendChild(sel);
+
+        } else if (domain === 'number') {
+          const min  = attrs.min ?? 0;
+          const max  = attrs.max ?? 100;
+          const step = attrs.step ?? 1;
+          const wrap = document.createElement('div');
+          wrap.style.cssText = 'display:flex;align-items:center;gap:6px';
+          const inp = document.createElement('input');
+          inp.type = 'range'; inp.min = min; inp.max = max; inp.step = step;
+          inp.value = stateVal;
+          inp.className = 'ent-slider';
+          const val = document.createElement('span');
+          val.className = 'ent-row-state';
+          val.textContent = `${stateVal}${unit ? ' '+unit : ''}`;
+          inp.oninput = () => { val.textContent = `${inp.value}${unit ? ' '+unit : ''}`; };
+          inp.onchange = () => fetch(`${this._haUrl}/api/services/number/set_value`,
+            { method:'POST', headers:this._hdrs,
+              body:JSON.stringify({entity_id:e.entity_id, value:parseFloat(inp.value)}) });
+          wrap.appendChild(inp); wrap.appendChild(val);
+          ctrl.appendChild(wrap);
+
+        } else {
+          // Solo lectura — mostrar valor
+          const valEl = document.createElement('div');
+          valEl.className = `ent-row-state ${isOn?'on':isOff?'off':''}`;
+          valEl.textContent = isNA ? '—' : (unit ? `${stateVal} ${unit}` : stateVal);
+          ctrl.appendChild(valEl);
+        }
+
+        row.appendChild(icon);
+        row.appendChild(body);
+        row.appendChild(ctrl);
+        list.appendChild(row);
+      });
+    });
+
+    // Suscribir a cambios de estado en tiempo real via WS
+    this._subscribePopupStates(activeEnts.map(e => e.entity_id));
+  }
+
+  // Suscripción a cambios de estado mientras el popup está abierto
+  _subscribePopupStates(entityIds) {
+    // Cerrar suscripción anterior si existe
+    if (this._popupWs) { try { this._popupWs.close(); } catch(e){} this._popupWs = null; }
+
+    const wsUrl = this._haUrl.replace(/^http/, 'ws') + '/api/websocket';
+    const ws = new WebSocket(wsUrl);
+    this._popupWs = ws;
+    let subId = 20;
+
+    ws.onmessage = ev => {
+      const m = JSON.parse(ev.data);
+      if (m.type === 'auth_required') {
+        ws.send(JSON.stringify({ type: 'auth', access_token: this._token }));
+      } else if (m.type === 'auth_ok') {
+        // Suscribir a cambios de estado de las entidades del popup
+        ws.send(JSON.stringify({
+          id: subId, type: 'subscribe_entities',
+          entity_ids: entityIds
+        }));
+      } else if (m.type === 'event' && m.event) {
+        // Actualizar controles con el nuevo estado
+        const changes = m.event.a || m.event.c || {};
+        Object.entries(changes).forEach(([entityId, change]) => {
+          const newState = change.s !== undefined ? change.s :
+                             (change['+'] && change['+'].s !== undefined ? change['+'].s : undefined);
+          if (newState === undefined) return;
+          const ctrlId = `ctrl-${entityId.replace(/\./g,'_')}`;
+          const ctrl = this.shadowRoot.getElementById(ctrlId);
+          if (!ctrl) return;
+
+          const domain = entityId.split('.')[0];
+          if (domain === 'switch' || domain === 'light' || domain === 'input_boolean') {
+            const tog = ctrl.querySelector('.ent-toggle');
+            if (tog) tog.classList.toggle('on', newState === 'on');
+          } else {
+            const valEl = ctrl.querySelector('.ent-row-state');
+            if (valEl) {
+              valEl.textContent = newState;
+              valEl.className = `ent-row-state ${newState==='on'?'on':newState==='off'?'off':''}`;
+            }
+          }
+        });
+      }
+    };
+    ws.onerror = () => {};
+
+    // Cerrar WS cuando se cierra el popup
+    const popup = this._$('ent-popup');
+    const observer = new MutationObserver(() => {
+      if (popup.style.display === 'none') {
+        try { ws.close(); } catch(e) {}
+        this._popupWs = null;
+        observer.disconnect();
+      }
+    });
+    observer.observe(popup, { attributes: true, attributeFilter: ['style'] });
   }
 
   // ── MODAL Y TOAST ─────────────────────────────────────────────

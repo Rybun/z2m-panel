@@ -1,12 +1,36 @@
 // Z2M Panel — panel_custom Web Component
-// v1.9.0
+// v2.1.0
 // Copiar a /config/www/z2m-panel.js
 // Registrar en configuration.yaml como panel_custom
 
 // Bridge ID se detecta automáticamente buscando el dispositivo Z2M Bridge
 // No hay que hardcodearlo — funciona en cualquier instancia de HA
 let BRIDGE_ID = null;
-const VER = 'v1.9.0';
+const VER = 'v2.1.0';
+
+// Cache busting: invalida la caché del navegador automáticamente
+// Añade ?v=VERSION a la URL del script en el configuration.yaml de forma efectiva
+// registrando el recurso como lovelace resource con versión
+(function bustCache() {
+  try {
+    const scripts = document.querySelectorAll('script[src*="z2m-panel"]');
+    scripts.forEach(s => {
+      const url = new URL(s.src, location.href);
+      if (!url.searchParams.has('v') || url.searchParams.get('v') !== VER) {
+        // La URL no tiene la versión correcta — forzamos recarga con la correcta
+        // almacenando en sessionStorage para evitar bucle infinito
+        const reloadKey = 'z2m-panel-reloaded-' + VER;
+        if (!sessionStorage.getItem(reloadKey)) {
+          sessionStorage.setItem(reloadKey, '1');
+          const newUrl = url.href.split('?')[0] + '?v=' + VER;
+          const newScript = document.createElement('script');
+          newScript.src = newUrl;
+          document.head.appendChild(newScript);
+        }
+      }
+    });
+  } catch(e) {}
+})();
 
 const imgUrl = m => m
   ? `https://www.zigbee2mqtt.io/images/devices/${m.replace(/\//g, '_')}.png`
@@ -50,10 +74,32 @@ const CSS = `
 #root{background:var(--bg);color:var(--text);min-height:100vh;transition:background .3s,color .3s}
 #navbar{position:sticky;top:0;z-index:100;background:rgba(0,0,0,.72);
   backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);
-  border-bottom:.5px solid var(--sep);padding:0 18px;height:52px;
+  border-bottom:.5px solid var(--sep);padding:0 14px 0 8px;height:52px;
   display:flex;align-items:center;justify-content:space-between;transition:background .3s}
 :host([theme="light"]) #navbar{background:rgba(242,242,247,.88)}
-.nav-left{display:flex;align-items:center;gap:9px}
+.nav-left{display:flex;align-items:center;gap:6px}
+
+/* Botón atrás */
+.back-btn{
+  width:34px;height:34px;border-radius:50%;border:none;
+  background:transparent;color:var(--tint);
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;font-size:20px;transition:all .15s;
+  flex-shrink:0;padding:0;line-height:1;
+}
+.back-btn:hover{background:var(--tint-bg);}
+.back-btn:active{transform:scale(.88);}
+
+/* Título de cabecera */
+.nav-title-wrap{display:flex;flex-direction:column;gap:1px;}
+.nav-title-main{
+  font-size:.92rem;font-weight:700;color:var(--text);
+  letter-spacing:-.01em;line-height:1.1;
+}
+.nav-title-sub{
+  font-size:.62rem;color:var(--text3);
+  display:flex;align-items:center;gap:5px;
+}
 .bridge-dot{width:8px;height:8px;border-radius:50%;background:var(--text3);transition:background .3s;flex-shrink:0}
 .bridge-dot.on{background:var(--green);box-shadow:0 0 6px var(--green);animation:pulse 2s infinite}
 .bridge-dot.off{background:var(--red)}
@@ -137,7 +183,7 @@ main{padding:18px 14px;max-width:1200px;margin:0 auto}
 .stats{font-size:.72rem;color:var(--text3)}
 .dev-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}
 .dev-card{background:var(--bg2);border-radius:var(--rc);padding:14px;
-  transition:transform .15s,box-shadow .15s;box-shadow:var(--shadow);animation:fadeUp .25s ease both}
+  transition:transform .15s,box-shadow .15s;box-shadow:var(--shadow);animation:fadeUp .25s ease both;cursor:pointer}
 :host([theme="light"]) .dev-card{box-shadow:0 1px 8px rgba(0,0,0,.08)}
 .dev-card:hover{transform:translateY(-2px);box-shadow:0 6px 24px rgba(0,0,0,.25)}
 :host([theme="light"]) .dev-card:hover{box-shadow:0 4px 16px rgba(0,0,0,.12)}
@@ -166,8 +212,7 @@ main{padding:18px 14px;max-width:1200px;margin:0 auto}
 .tag.oth{background:var(--bg3);color:var(--text3)}
 .tag.area{background:var(--tint-bg);color:var(--tint);opacity:.7}
 .dev-foot{display:flex;align-items:center;justify-content:space-between}
-.dev-actions{display:flex;gap:6px;opacity:0;transition:opacity .15s}
-.dev-card:hover .dev-actions{opacity:1}
+.dev-actions{display:flex;gap:6px}
 .act-btn{width:30px;height:30px;border-radius:8px;border:none;background:var(--bg3);
   color:var(--text2);display:flex;align-items:center;justify-content:center;
   cursor:pointer;font-size:13px;transition:all .15s}
@@ -213,6 +258,59 @@ main{padding:18px 14px;max-width:1200px;margin:0 auto}
   animation:fadeUp .25s ease;white-space:nowrap;box-shadow:0 4px 20px rgba(0,0,0,.35)}
 .toast.ok{background:var(--green);color:#fff}
 .toast.err{background:var(--red);color:#fff}
+/* ── POPUP DE ENTIDADES ── */
+@keyframes popIn{
+  0%  {opacity:0;transform:translateY(12px) scale(.96);}
+  70% {transform:translateY(-2px) scale(1.01);}
+  100%{opacity:1;transform:translateY(0) scale(1);}
+}
+.ent-popup{
+  position:fixed;inset:0;z-index:400;
+  display:flex;align-items:flex-end;justify-content:center;
+  background:rgba(0,0,0,.55);backdrop-filter:blur(8px);
+  -webkit-backdrop-filter:blur(8px);
+}
+.ent-sheet{
+  background:var(--bg2);width:100%;max-width:560px;
+  border-radius:20px 20px 0 0;padding:8px 0 40px;
+  max-height:80vh;overflow-y:auto;
+  animation:popIn .3s cubic-bezier(.34,1.56,.64,1);
+}
+.ent-handle{width:36px;height:4px;border-radius:2px;background:var(--bg4);margin:0 auto 16px}
+.ent-header{padding:0 20px 14px;border-bottom:.5px solid var(--sep);display:flex;align-items:center;gap:12px}
+.ent-header-thumb{
+  width:44px;height:44px;border-radius:12px;flex-shrink:0;
+  background:var(--bg3);display:flex;align-items:center;justify-content:center;
+  font-size:20px;overflow:hidden;
+}
+.ent-header-thumb img{width:100%;height:100%;object-fit:contain;padding:4px}
+.ent-header-info{flex:1;min-width:0}
+.ent-header-name{font-size:.95rem;font-weight:700;color:var(--text);margin-bottom:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ent-header-model{font-size:.72rem;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ent-list{padding:8px 0}
+.ent-row{
+  display:flex;align-items:center;padding:10px 20px;gap:12px;
+  transition:background .12s;cursor:default;
+}
+.ent-row:hover{background:var(--bg3)}
+.ent-row-icon{
+  width:34px;height:34px;border-radius:9px;flex-shrink:0;
+  background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:16px;
+}
+.ent-row-body{flex:1;min-width:0}
+.ent-row-name{font-size:.83rem;font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ent-row-id{font-size:.65rem;color:var(--text3);font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ent-row-state{
+  font-size:.78rem;font-weight:600;font-family:monospace;
+  color:var(--text2);flex-shrink:0;text-align:right;
+}
+.ent-row-state.on{color:var(--green)}
+.ent-row-state.off{color:var(--text3)}
+.ent-section-title{
+  font-size:.62rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--text3);padding:10px 20px 4px;font-family:monospace;
+}
+
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 @keyframes slideSheet{from{transform:translateY(100%)}to{transform:translateY(0)}}
@@ -387,6 +485,23 @@ const HTML = `
       <div class="loading"><div class="spinner"></div><span>Cargando…</span></div>
     </div>
   </main>
+  <!-- POPUP ENTIDADES -->
+  <div class="ent-popup" id="ent-popup" style="display:none" onclick="this.style.display='none'">
+    <div class="ent-sheet" onclick="event.stopPropagation()">
+      <div class="ent-handle"></div>
+      <div class="ent-header">
+        <div class="ent-header-thumb" id="ent-thumb"></div>
+        <div class="ent-header-info">
+          <div class="ent-header-name" id="ent-name"></div>
+          <div class="ent-header-model" id="ent-model"></div>
+        </div>
+        <button class="act-btn" id="ent-rename-btn" title="Renombrar">✏️</button>
+        <button class="act-btn del" id="ent-delete-btn" title="Eliminar">🗑️</button>
+      </div>
+      <div class="ent-list" id="ent-list"></div>
+    </div>
+  </div>
+
   <!-- ALERTA NUEVO DISPOSITIVO -->
   <div id="new-device-alert" role="alert" aria-live="assertive">
     <div class="alert-progress"></div>
@@ -495,6 +610,17 @@ class Z2MPanel extends HTMLElement {
   // ── EVENTOS ───────────────────────────────────────────────────
   _bindEvents() {
     this._$('btn-reload').addEventListener('click', () => this._load());
+    this._$('btn-back').addEventListener('click', () => {
+      // Navegar de vuelta al dashboard por defecto de HA
+      try {
+        // Intentar usar la API de navegación de HA si está disponible
+        const p = window.parent;
+        if (p && p.history) { p.history.back(); return; }
+        // Fallback: navegar al root de HA
+        if (p && p.location) { p.location.href = '/'; return; }
+      } catch(e) {}
+      window.history.back();
+    });
     this._$('btn-pair').addEventListener('click', () => this._startPair());
     this._$('btn-stop').addEventListener('click', () => this._stopPair());
     this._$('q').addEventListener('input', () => this._applyFilters());
@@ -717,9 +843,12 @@ class Z2MPanel extends HTMLElement {
 
       this._devices = z2m.map(d => {
         const ents    = allEnts.filter(e => e.device_id === d.id);
-        const lqE     = ents.find(e => e.entity_id.includes('linkquality'));
+        // Buscar entidad linkquality — puede tener prefijo 0x o nombre amigable
+      const lqE     = ents.find(e => e.entity_id.includes('linkquality')) ||
+                      ents.find(e => (e.original_name || '').toLowerCase().includes('linkquality'));
         const bE      = ents.find(e => /(battery|batt)$/.test(e.entity_id) && !e.entity_id.includes('low'));
-        const lq      = lqE ? parseInt(sm[lqE.entity_id]?.state) : null;
+        const lqState = lqE ? sm[lqE.entity_id] : null;
+      const lq      = lqState && lqState.state !== 'unavailable' ? parseInt(lqState.state) : null;
         const b       = bE  ? parseInt(sm[bE.entity_id]?.state)  : null;
         const ieee    = d.identifiers?.find(i => i[0] === 'mqtt')?.[1] || d.name;
         // Usar el model ID real de Z2M si está disponible, sino el de HA
@@ -842,8 +971,10 @@ class Z2MPanel extends HTMLElement {
       </div>`;
 
     card.querySelector('.dev-head').insertBefore(thumbDiv, card.querySelector('.dev-info'));
-    card.querySelector('.act-btn').addEventListener('click', () => this._openRename(d.name));
-    card.querySelector('.act-btn.del').addEventListener('click', () => this._openDelete(d.name));
+    card.querySelector('.act-btn').addEventListener('click', (e) => { e.stopPropagation(); this._openRename(d.name); });
+    card.querySelector('.act-btn.del').addEventListener('click', (e) => { e.stopPropagation(); this._openDelete(d.name); });
+    // Click en la tarjeta abre el popup de entidades
+    card.addEventListener('click', () => this._openEntPopup(d));
     return card;
   }
 
@@ -1112,6 +1243,85 @@ class Z2MPanel extends HTMLElement {
       ].join(';');
       container.appendChild(p);
     }
+  }
+
+  // ── POPUP DE ENTIDADES ───────────────────────────────────────
+  async _openEntPopup(d) {
+    const popup   = this._$('ent-popup');
+    const thumb   = this._$('ent-thumb');
+    const nameEl  = this._$('ent-name');
+    const modelEl = this._$('ent-model');
+    const list    = this._$('ent-list');
+    const renBtn  = this._$('ent-rename-btn');
+    const delBtn  = this._$('ent-delete-btn');
+
+    // Cabecera
+    nameEl.textContent  = d.name;
+    modelEl.textContent = `${d.vendor || ''} ${d.model || ''}`.trim() || d.ieee;
+    thumb.innerHTML = '';
+    thumb.appendChild(this._thumbEl(d.model, d.modelId));
+
+    renBtn.onclick = (e) => { e.stopPropagation(); popup.style.display='none'; this._openRename(d.name); };
+    delBtn.onclick = (e) => { e.stopPropagation(); popup.style.display='none'; this._openDelete(d.name); };
+
+    // Entidades — obtener estados actuales
+    list.innerHTML = '<div class="ent-section-title">Entidades</div>';
+
+    if (!d.ents || !d.ents.length) {
+      list.innerHTML += '<div style="padding:20px;text-align:center;color:var(--text3);font-size:.82rem">Sin entidades disponibles</div>';
+    } else {
+      // Obtener estados en paralelo
+      const entityIds = d.ents.map(e => e.entity_id);
+      let stateMap = {};
+      try {
+        const resp = await fetch(`${this._haUrl}/api/states`, { headers: this._hdrs });
+        const all  = await resp.json();
+        all.forEach(s => { stateMap[s.entity_id] = s; });
+      } catch(e) {}
+
+      const domainIcon = {
+        switch:'🔌', light:'💡', sensor:'📊', binary_sensor:'🔔',
+        select:'📋', number:'🔢', button:'🔘', cover:'🪟',
+        lock:'🔒', text:'📝', update:'⬆️', climate:'🌡️',
+      };
+
+      // Agrupar por dominio
+      const byDomain = {};
+      d.ents.forEach(e => {
+        const domain = e.entity_id.split('.')[0];
+        if (!byDomain[domain]) byDomain[domain] = [];
+        byDomain[domain].push(e);
+      });
+
+      Object.entries(byDomain).forEach(([domain, ents]) => {
+        const secTitle = document.createElement('div');
+        secTitle.className = 'ent-section-title';
+        secTitle.textContent = domain;
+        list.appendChild(secTitle);
+
+        ents.forEach(e => {
+          const state = stateMap[e.entity_id];
+          const stateVal = state ? state.state : '—';
+          const unit = state?.attributes?.unit_of_measurement || '';
+          const isOn  = stateVal === 'on';
+          const isOff = stateVal === 'off';
+          const displayVal = unit ? `${stateVal} ${unit}` : stateVal;
+
+          const row = document.createElement('div');
+          row.className = 'ent-row';
+          row.innerHTML = `
+            <div class="ent-row-icon">${domainIcon[domain] || '⚙️'}</div>
+            <div class="ent-row-body">
+              <div class="ent-row-name">${e.name || e.entity_id.split('.').pop()}</div>
+              <div class="ent-row-id">${e.entity_id}</div>
+            </div>
+            <div class="ent-row-state ${isOn?'on':isOff?'off':''}">${displayVal}</div>`;
+          list.appendChild(row);
+        });
+      });
+    }
+
+    popup.style.display = 'flex';
   }
 
   // ── MODAL Y TOAST ─────────────────────────────────────────────

@@ -1,5 +1,5 @@
 // Z2M Panel — panel_custom Web Component
-// v2.20.0
+// v2.21.0
 // Copiar a /config/www/z2m-panel.js
 // Registrar en configuration.yaml como panel_custom
 
@@ -28,7 +28,7 @@ function ageClass(date) {
 // Bridge ID se detecta automáticamente buscando el dispositivo Z2M Bridge
 // No hay que hardcodearlo — funciona en cualquier instancia de HA
 let BRIDGE_ID = null;
-const VER = 'v2.20.0';
+const VER = 'v2.21.0';
 
 // Cache busting: detecta si hay una versión más nueva del archivo en disco
 // (ocurre tras una actualización de HACS) y fuerza una recarga sin caché.
@@ -579,15 +579,16 @@ main{padding:18px 14px;max-width:1200px;margin:0 auto}
 :host([theme="light"]) .pr-ring:nth-child(3){border-color:rgba(0,122,255,.22);}
 
 /* ── PAIR BUTTON pairing state ── */
-/* Pulso con ::after + transform/opacity (composited, sin repaints del navbar) */
-.pair-btn{position:relative;}
+/* overflow:hidden contiene el ::after dentro del botón — evita repaint de página y scrollbar */
+.pair-btn{position:relative;overflow:hidden;}
 .pair-btn.pairing{background:var(--red)!important;transition:background .4s ease;}
 .pair-btn.pairing::after{
   content:'';position:absolute;inset:0;border-radius:var(--rp);
-  background:var(--red);
-  animation:pairPulse 1.4s ease-in-out infinite;pointer-events:none;
+  background:rgba(255,255,255,.35);
+  animation:pairPulse 1.5s ease-out infinite;pointer-events:none;
+  will-change:transform,opacity;
 }
-@keyframes pairPulse{0%,100%{transform:scale(1);opacity:.55;}50%{transform:scale(1.65);opacity:0;}}
+@keyframes pairPulse{0%{transform:scale(0);opacity:.7;}100%{transform:scale(1.5);opacity:0;}}
 
 /* ── FADE OUT para eliminar cards ── */
 @keyframes cardFadeOut{from{opacity:1;transform:scale(1)}to{opacity:0;transform:scale(.9)}}

@@ -4,7 +4,7 @@
 
 Panel de gestión de Zigbee2MQTT para Home Assistant. Se integra como `panel_custom` en el menú lateral, con diseño estilo iOS, tema claro/oscuro y funcionalidad completa de gestión de dispositivos Zigbee.
 
-![Version](https://img.shields.io/badge/version-1.0.0-blue)
+![Version](https://img.shields.io/badge/version-1.0.1-blue)
 ![HACS](https://img.shields.io/badge/HACS-Custom-orange)
 ![HA](https://img.shields.io/badge/Home%20Assistant-panel_custom-41BDF5)
 

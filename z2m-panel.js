@@ -1,5 +1,5 @@
 // Z2M Panel — panel_custom Web Component
-// v1.0.0
+// v1.0.1
 // Copiar a /config/www/z2m-panel.js
 // Registrar en configuration.yaml como panel_custom
 
@@ -28,7 +28,7 @@ function ageClass(date) {
 // Bridge ID se detecta automáticamente buscando el dispositivo Z2M Bridge
 // No hay que hardcodearlo — funciona en cualquier instancia de HA
 let BRIDGE_ID = null;
-const VER = 'v1.0.0';
+const VER = 'v1.0.1';
 
 // Capturar la URL del script en tiempo de carga (currentScript solo está disponible síncronamente)
 const SCRIPT_SRC = document.currentScript?.src || '/local/community/z2m-panel/z2m-panel.js';
@@ -48,8 +48,12 @@ async function checkForUpdate() {
       const key = 'z2m-cache-reloaded-' + m[1];
       if (!sessionStorage.getItem(key)) {
         sessionStorage.setItem(key, '1');
-        // eslint-disable-next-line no-restricted-globals
-        location.reload(true);
+        // location.reload(true) no fuerza bypass de caché en navegadores modernos.
+        // Cambiar la URL con un query param único obliga al navegador a tratar
+        // la página como nueva y re-descargar todos los recursos (incluido el JS).
+        const url = new URL(location.href);
+        url.searchParams.set('_z2m', m[1]);
+        location.replace(url.toString());
       }
     }
   } catch(e) {}
@@ -882,11 +886,9 @@ class Z2MPanel extends HTMLElement {
   _bindEvents() {
     this._$('btn-reload').addEventListener('click', () => this._load(true));
     this._$('btn-back').addEventListener('click', () => {
-      // Intentar todas las formas conocidas de abrir el sidebar de HA
-      const ev = new Event('hass-toggle-menu', { bubbles: true, composed: true });
-      window.dispatchEvent(ev);
-      const ha = document.querySelector('home-assistant');
-      if (ha) ha.dispatchEvent(new Event('hass-toggle-menu', { bubbles: true, composed: true }));
+      // Disparar desde nuestro elemento con composed:true para que burbujee
+      // por todo el árbol shadow DOM hasta llegar al listener de home-assistant
+      this.dispatchEvent(new Event('hass-toggle-menu', { bubbles: true, composed: true }));
     });
     this._$('btn-pair').addEventListener('click', () => {
       if (this._pairActive) this._stopPair();
